@@ -582,8 +582,20 @@ function dateKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(
 async function loadProfiles(){
   const { data } = await db.from('profiles').select('*').order('id');
   state.profiles = data||[];
-  if(!state.profile && state.profiles.length) state.profile = state.profiles[0];
-  if(state.profile){ document.getElementById('profAv').textContent=state.profile.emoji; document.getElementById('profName').textContent=state.profile.name; }
+  let saved=0; try{ saved=+(localStorage.getItem('profile_id')||0); }catch(e){}
+  state.profile = state.profiles.find(p=>p.id===saved) || state.profile || state.profiles[0] || null;
+  state.askProfile = !saved && state.profiles.length>1;
+  showProfile();
+}
+function showProfile(){ if(state.profile){ document.getElementById('profAv').textContent=state.profile.emoji; document.getElementById('profName').textContent=state.profile.name; } }
+// у каждого на своём телефоне — свой профиль (запоминается на устройстве)
+function setProfile(p){ state.profile=p; try{ localStorage.setItem('profile_id',p.id); }catch(e){} showProfile(); }
+function openWhoAmI(){
+  const sheet=document.getElementById('sheet');
+  sheet.innerHTML=`<h3>Кто сейчас готовит?</h3><div class="hnote">Запомню на этом телефоне. Сменить можно во вкладке «Семья».</div>`+
+    state.profiles.map(p=>`<div class="prof-item" data-who="${p.id}"><span class="av" style="background:${p.color}22">${p.emoji}</span><span class="nm">${esc(p.name)}</span></div>`).join('');
+  sheet.querySelectorAll('[data-who]').forEach(el=>el.onclick=()=>{ setProfile(state.profiles.find(p=>p.id===+el.dataset.who)); closeModal(); renderGallery(); toast(`Привет, ${state.profile.name}!`); });
+  openModal();
 }
 
 async function loadTags(){
@@ -1055,7 +1067,7 @@ async function renderFamily(){
     <div class="seclabel">Хотелки недели 💭</div>
     <div style="margin-bottom:12px">${wishes.length?wishes.map(w=>`<div class="wish"><span class="av" style="background:${(w.profiles?.color||'#FF7A00')}22">${w.profiles?.emoji||'🙂'}</span><div class="wtext">${w.recipes?w.recipes.title:w.free_text||'—'}<div class="wwho">${w.profiles?.name||''}</div></div><button class="wish-del" data-wid="${w.id}"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`).join(''):'<div style="color:var(--ink-soft);font-size:14px;padding:8px 2px">Пока пусто. Добавь что хочется приготовить на неделе.</div>'}</div>
     <div class="add-row" style="padding:0"><input class="nm" id="wishText" placeholder="Хочу приготовить…" style="flex:1"><button id="addWish">＋</button></div>`;
-  c.querySelectorAll('[data-pid]').forEach(el=>el.onclick=()=>{ state.profile=state.profiles.find(p=>p.id===+el.dataset.pid); document.getElementById('profAv').textContent=state.profile.emoji; document.getElementById('profName').textContent=state.profile.name; renderFamily(); renderGallery(); toast(`Готовит: ${state.profile.name}`); });
+  c.querySelectorAll('[data-pid]').forEach(el=>el.onclick=()=>{ setProfile(state.profiles.find(p=>p.id===+el.dataset.pid)); renderFamily(); toast(`Готовит: ${state.profile.name}`); });
   document.getElementById('addProf').onclick=addProfile;
   c.querySelectorAll('.wish-del').forEach(b=>b.onclick=async()=>{ await db.from('wishes').delete().eq('id',+b.dataset.wid); renderFamily(); });
   document.getElementById('addWish').onclick=async()=>{ const t=document.getElementById('wishText').value.trim(); if(!t) return; await db.from('wishes').insert({profile_id:state.profile?.id,free_text:t}); document.getElementById('wishText').value=''; renderFamily(); toast("Хотелка добавлена ✓"); };
@@ -1239,6 +1251,7 @@ document.querySelectorAll('#screen-shop .toggle button').forEach(b=>b.onclick=()
     await Promise.all([loadProfiles(),loadTags()]);
     await loadRecipes();
     renderGallery();
+    if(state.askProfile) openWhoAmI();
   } catch(e){ console.error(e); document.getElementById('galleryState').innerHTML="Ошибка подключения к базе. Проверь интернет."; }
 })();
 </script>
