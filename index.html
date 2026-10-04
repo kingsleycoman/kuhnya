@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Мои рецепты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --paper:#FBF7F0; --card:#FFF; --accent:#E8541E; --accent-soft:#FBEDE6;
+    --ink:#2B2420; --ink-soft:#8A8178; --line:#ECE5DA;
+    --green:#5B8C3E; --green-soft:#EDF3E5;
+    --warn:#D98324; --warn-soft:#FBF0DF; --danger:#C0392B; --danger-soft:#FBE9E7;
+    --radius:18px; --radius-sm:12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:'Inter',sans-serif; background:var(--paper); color:var(--ink);
+    -webkit-font-smoothing:antialiased; padding-bottom:88px; }
+  .wrap { max-width:720px; margin:0 auto; padding:0 16px; }
+  .hidden { display:none !important; }
+  .screen { display:none; }
+  .screen.active { display:block; }
+
+  /* Header */
+  .topbar { display:flex; justify-content:space-between; align-items:center; padding:22px 0 10px; }
+  .brand { font-family:'Unbounded',sans-serif; font-weight:700; font-size:23px; letter-spacing:-0.5px; }
+  .brand span { color:var(--accent); }
+  .profile-btn { display:flex; align-items:center; gap:7px; background:var(--card); border:1px solid var(--line);
+    border-radius:100px; padding:5px 12px 5px 6px; cursor:pointer; font-size:13px; font-weight:600; }
+  .profile-btn .av { width:26px; height:26px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:15px; }
+
+  /* Search */
+  .search { position:relative; margin:6px 0 14px; }
+  .search input { width:100%; font-family:'Inter',sans-serif; font-size:16px; padding:14px 16px 14px 46px;
+    border:1.5px solid var(--line); border-radius:14px; background:var(--card); color:var(--ink); outline:none; }
+  .search input:focus { border-color:var(--accent); }
+  .search-icon { position:absolute; left:15px; top:50%; transform:translateY(-50%);
+    width:20px; height:20px; stroke:var(--ink-soft); fill:none; stroke-width:2; }
+
+  /* Filters */
+  .filters { display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:4px; scrollbar-width:none; }
+  .filters::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; font-size:14px; font-weight:500; padding:9px 15px; border:1.5px solid var(--line);
+    border-radius:100px; background:var(--card); color:var(--ink); cursor:pointer; white-space:nowrap;
+    display:flex; align-items:center; gap:6px; transition:all .12s; }
+  .chip.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .chip.pp.active { background:var(--green); border-color:var(--green); }
+
+  .count { font-size:13px; color:var(--ink-soft); margin:6px 2px 14px; }
+
+  /* Grid */
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:13px; }
+  .recipe { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden; cursor:pointer; transition:transform .15s,box-shadow .15s; display:flex; flex-direction:column; }
+  .recipe:active { transform:scale(.98); }
+  .photo { position:relative; aspect-ratio:4/3; background:var(--accent-soft); overflow:hidden; }
+  .photo img { width:100%; height:100%; object-fit:cover; display:block; }
+  .photo .noimg { width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    font-size:32px; color:var(--accent); opacity:.4; }
+  .tab { position:absolute; top:9px; left:9px; font-size:11px; font-weight:600; padding:4px 9px;
+    border-radius:100px; background:rgba(255,255,255,.94); color:var(--ink); backdrop-filter:blur(4px); }
+  .fav { position:absolute; top:7px; right:7px; width:31px; height:31px; border-radius:50%;
+    background:rgba(255,255,255,.9); display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; }
+  .fav svg { width:16px; height:16px; stroke:var(--accent); fill:none; stroke-width:2; }
+  .fav.on svg { fill:var(--accent); }
+  .rbody { padding:11px 13px 13px; flex:1; display:flex; flex-direction:column; }
+  .rtitle { font-family:'Unbounded',sans-serif; font-weight:600; font-size:13.5px; line-height:1.3;
+    letter-spacing:-0.2px; margin-bottom:8px; }
+  .rmeta { margin-top:auto; display:flex; flex-wrap:wrap; gap:5px; }
+  .pill { font-size:11px; font-weight:500; padding:3px 8px; border-radius:100px; background:var(--paper); color:var(--ink-soft); }
+  .pill.pp { background:var(--green-soft); color:var(--green); }
+  .pill.kcal { background:var(--accent-soft); color:var(--accent); }
+
+  /* Loading / empty */
+  .state { text-align:center; padding:50px 20px; color:var(--ink-soft); font-size:15px; }
+  .spinner { width:34px; height:34px; border:3px solid var(--line); border-top-color:var(--accent);
+    border-radius:50%; margin:0 auto 14px; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Bottom nav */
+  .nav { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--line);
+    display:flex; justify-content:space-around; padding:9px 0 max(9px,env(safe-area-inset-bottom)); z-index:50; }
+  .nav a { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:11px; font-weight:500;
+    color:var(--ink-soft); cursor:pointer; padding:4px 14px; }
+  .nav a.active { color:var(--accent); }
+  .nav svg { width:23px; height:23px; stroke:currentColor; fill:none; stroke-width:2; }
+
+  /* Card screen */
+  .card-gallery { position:relative; }
+  .card-main { aspect-ratio:16/10; background:var(--accent-soft); overflow:hidden; }
+  .card-main img { width:100%; height:100%; object-fit:cover; }
+  .card-main .noimg { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:48px; color:var(--accent); opacity:.4; }
+  .iconbtn { position:absolute; top:14px; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.92);
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+  .iconbtn svg { width:19px; height:19px; stroke:var(--ink); fill:none; stroke-width:2; }
+  .iconbtn.back { left:14px; } .iconbtn.favc { right:14px; }
+  .iconbtn.favc svg { stroke:var(--accent); }
+  .iconbtn.favc.on svg { fill:var(--accent); }
+  .thumbs { display:flex; gap:8px; padding:10px 16px 0; overflow-x:auto; scrollbar-width:none; }
+  .thumbs::-webkit-scrollbar { display:none; }
+  .thumbs img { width:60px; height:60px; border-radius:10px; object-fit:cover; cursor:pointer; border:2px solid transparent; flex:0 0 auto; }
+  .thumbs img.active { border-color:var(--accent); }
+  .photo video, .card-main video { width:100%; height:100%; object-fit:cover; display:block; background:#000; }
+  .card-main video { object-fit:contain; }
+  .card-main { position:relative; }
+  .vnote { position:absolute; left:0; right:0; top:0; padding:12px 116px 16px 64px; font-size:11px; line-height:1.3; text-align:left; color:#fff; background:linear-gradient(rgba(0,0,0,.5),transparent); pointer-events:none; }
+  .play { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:42px; height:42px; border-radius:50%;
+    background:rgba(0,0,0,.45); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; pointer-events:none; }
+  .vthumb { width:60px; height:60px; border-radius:10px; flex:0 0 auto; cursor:pointer; border:2px solid transparent;
+    background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .vthumb.active { border-color:var(--accent); }
+  .card-content.hack .kbzhu, .card-content.hack .kbzhu-label, .card-content.hack .ing-head,
+  .card-content.hack .ing, .card-content.hack .actions { display:none; }
+  .thumb-add { width:60px; height:60px; border-radius:10px; flex:0 0 auto; cursor:pointer; border:1.5px dashed var(--line);
+    background:var(--card); display:flex; align-items:center; justify-content:center; color:var(--ink-soft); }
+  .thumb-add svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2; }
+  .card-content { padding:16px; }
+  .card-content h1 { font-family:'Unbounded',sans-serif; font-weight:600; font-size:21px; line-height:1.25; letter-spacing:-0.4px; margin-bottom:12px; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px; }
+  .tag { font-size:12px; font-weight:500; padding:5px 12px; border-radius:100px; background:var(--card); border:1px solid var(--line); color:var(--ink-soft); }
+  .tag.pp { background:var(--green-soft); border-color:transparent; color:var(--green); }
+  .tag.type { background:var(--accent-soft); border-color:transparent; color:var(--accent); }
+  .actions { display:flex; gap:10px; margin-bottom:22px; }
+  .btn { flex:1; font-family:'Inter',sans-serif; font-size:15px; font-weight:600; padding:14px; border-radius:14px;
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn:active { transform:scale(.97); }
+  .btn svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-second { background:var(--card); color:var(--ink); border:1.5px solid var(--line); }
+  .seclabel { font-family:'Unbounded',sans-serif; font-weight:600; font-size:14px; margin-bottom:12px; letter-spacing:-0.2px; }
+  .kbzhu { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:22px; }
+  .kbzhu-head { display:flex; }
+  .kbzhu-tab { flex:1; text-align:center; padding:12px; font-size:13px; font-weight:600; cursor:pointer; color:var(--ink-soft); border-bottom:2px solid transparent; }
+  .kbzhu-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .kbzhu-grid { display:grid; grid-template-columns:repeat(4,1fr); padding:16px 8px; }
+  .kb { text-align:center; } .kb .v { font-family:'Unbounded',sans-serif; font-weight:600; font-size:18px; } .kb .l { font-size:11px; color:var(--ink-soft); margin-top:2px; } .kb.kc .v { color:var(--accent); }
+  .ing-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .portion { display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:100px; padding:4px; }
+  .portion button { width:28px; height:28px; border-radius:50%; border:none; background:var(--paper); cursor:pointer; font-size:16px; color:var(--ink); }
+  .portion span { font-size:13px; font-weight:600; min-width:64px; text-align:center; }
+  .ing { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:22px; overflow:hidden; }
+  .ing-row { display:flex; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); font-size:15px; }
+  .ing-row:last-child { border-bottom:none; }
+  .ing-row .q { color:var(--ink-soft); font-weight:500; }
+  .step { display:flex; gap:13px; margin-bottom:15px; }
+  .step-n { flex:0 0 auto; width:29px; height:29px; border-radius:50%; background:var(--accent); color:#fff;
+    font-family:'Unbounded',sans-serif; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center; }
+  .step-t { font-size:15px; line-height:1.55; padding-top:3px; }
+  .note { background:var(--accent-soft); border-radius:var(--radius); padding:14px 16px; margin:6px 0 24px; font-size:14px; line-height:1.5; }
+
+  /* Plan */
+  .week-nav { display:flex; align-items:center; justify-content:space-between; margin:8px 0 12px; }
+  .week-nav .lbl { font-size:14px; font-weight:600; }
+  .week-nav button { width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--card); cursor:pointer; }
+  .week-nav svg { width:18px; height:18px; stroke:var(--ink); fill:none; stroke-width:2; }
+  .trip { background:var(--card); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:14px; }
+  .trip svg { width:18px; height:18px; stroke:var(--accent); fill:none; stroke-width:2; flex:0 0 auto; }
+  .trip select { font-family:'Inter',sans-serif; font-size:14px; font-weight:600; border:none; background:transparent; color:var(--accent); cursor:pointer; outline:none; }
+  .advisor { border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; font-size:14px; line-height:1.5; }
+  .advisor.warn { background:var(--warn-soft); } .advisor.danger { background:var(--danger-soft); }
+  .advisor-title { display:flex; align-items:center; gap:8px; font-weight:600; margin-bottom:6px; }
+  .advisor.warn .advisor-title { color:var(--warn); } .advisor.danger .advisor-title { color:var(--danger); }
+  .advisor svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; }
+  .advisor ul { margin:4px 0 0 22px; }
+  .day { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
+  .day.today { border-color:var(--accent); }
+  .day-head { padding:13px 16px; border-bottom:1px solid var(--line); }
+  .day-name { font-family:'Unbounded',sans-serif; font-weight:600; font-size:15px; }
+  .day.today .day-name { color:var(--accent); }
+  .day-date { font-size:12px; color:var(--ink-soft); margin-left:8px; font-weight:400; }
+  .slot { padding:8px 16px; border-bottom:1px solid var(--line); }
+  .slot:last-child { border-bottom:none; }
+  .slot-label { font-size:11px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.5px; margin:4px 0; }
+  .meal { display:flex; align-items:center; gap:10px; padding:7px 0; }
+  .meal img { width:40px; height:40px; border-radius:9px; object-fit:cover; flex:0 0 auto; }
+  .meal-info { flex:1; min-width:0; } .meal-title { font-size:14px; font-weight:500; }
+  .meal-warn { display:flex; align-items:center; gap:5px; font-size:12px; margin-top:3px; }
+  .meal-warn.warn { color:var(--warn); } .meal-warn.danger { color:var(--danger); }
+  .meal-warn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; flex:0 0 auto; }
+  .meal-del { width:26px; height:26px; border:none; background:transparent; cursor:pointer; color:var(--ink-soft); flex:0 0 auto; }
+  .meal-del svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+  .add-meal { display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:13px; cursor:pointer; padding:6px 0; }
+  .add-meal svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+  .cta { position:fixed; bottom:72px; left:0; right:0; display:flex; justify-content:center; padding:0 16px; z-index:40; }
+  .cta button { max-width:688px; width:100%; font-size:16px; font-weight:600; padding:15px; border-radius:15px;
+    border:none; background:var(--accent); color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px; box-shadow:0 6px 20px rgba(232,84,30,.32); }
+  .cta button svg { width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:2; }
+
+  /* Shopping */
+  .toggle { display:flex; background:var(--card); border:1px solid var(--line); border-radius:100px; padding:4px; margin:6px 0 16px; }
+  .toggle button { flex:1; font-size:13px; font-weight:600; padding:9px; border:none; background:transparent; color:var(--ink-soft); cursor:pointer; border-radius:100px; }
+  .toggle button.active { background:var(--accent); color:#fff; }
+  .group { margin-bottom:20px; }
+  .group-title { font-family:'Unbounded',sans-serif; font-weight:600; font-size:12px; color:var(--ink-soft); margin-bottom:8px; text-transform:uppercase; letter-spacing:.5px; }
+  .group-title.mine { color:var(--accent); }
+  .list { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .item { display:flex; align-items:center; gap:12px; padding:13px 16px; border-bottom:1px solid var(--line); }
+  .item:last-child { border-bottom:none; }
+  .check { width:22px; height:22px; border-radius:7px; border:2px solid var(--line); flex:0 0 auto; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .check.on { background:var(--green); border-color:var(--green); }
+  .check svg { width:13px; height:13px; stroke:#fff; fill:none; stroke-width:3; opacity:0; }
+  .check.on svg { opacity:1; }
+  .item-name { flex:1; font-size:15px; font-weight:500; }
+  .item.done .item-name { text-decoration:line-through; color:var(--ink-soft); }
+  .item-qty { font-size:14px; font-weight:600; color:var(--accent); }
+  .add-row { display:flex; gap:8px; padding:12px 16px; }
+  .add-row input { font-family:'Inter',sans-serif; font-size:14px; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px; outline:none; }
+  .add-row input:focus { border-color:var(--accent); }
+  .add-row input.nm { flex:1; } .add-row input.qt { flex:0 0 84px; }
+  .add-row button { border:none; background:var(--accent); color:#fff; border-radius:10px; width:42px; cursor:pointer; font-size:20px; }
+
+  /* Modal (profile / recipe picker) */
+  .modal { position:fixed; inset:0; background:rgba(43,36,32,.5); z-index:100; display:none; align-items:flex-end; }
+  .modal.open { display:flex; }
+  .sheet { background:var(--paper); width:100%; max-width:720px; margin:0 auto; border-radius:22px 22px 0 0;
+    padding:20px 16px max(20px,env(safe-area-inset-bottom)); max-height:80vh; overflow-y:auto; }
+  .sheet h3 { font-family:'Unbounded',sans-serif; font-weight:600; font-size:17px; margin-bottom:16px; }
+  .prof-item { display:flex; align-items:center; gap:12px; padding:13px; background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:8px; cursor:pointer; }
+  .prof-item.active { border-color:var(--accent); }
+  .prof-item .av { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:19px; }
+  .prof-item .nm { font-weight:600; flex:1; }
+  .pick-recipe { display:flex; align-items:center; gap:12px; padding:10px; background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:8px; cursor:pointer; }
+  .pick-recipe img { width:44px; height:44px; border-radius:9px; object-fit:cover; }
+  .pick-recipe .noimg { width:44px; height:44px; border-radius:9px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; }
+  .toast { position:fixed; bottom:96px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:11px 18px; border-radius:100px; font-size:14px; font-weight:500; z-index:200; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.show { opacity:1; }
+
+  /* Готовим сегодня */
+  .today-card { background:var(--accent); color:#fff; border-radius:var(--radius); padding:15px 16px; margin-bottom:16px; cursor:pointer; }
+  .today-card .lbl { font-size:12px; font-weight:600; opacity:.85; text-transform:uppercase; letter-spacing:.5px; display:flex; align-items:center; gap:6px; }
+  .today-card .lbl svg { width:14px; height:14px; stroke:#fff; fill:none; stroke-width:2; }
+  .today-card .meals { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .today-card .tm { font-family:'Unbounded',sans-serif; font-weight:600; font-size:15px; }
+  .today-card .ts { font-size:12px; opacity:.85; }
+
+  /* Кнопки-подсказки на плане */
+  .hints { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .hint { flex:1; min-width:140px; background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:12px; cursor:pointer; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; color:var(--ink); }
+  .hint:active { transform:scale(.97); } .hint svg { width:18px; height:18px; stroke:var(--accent); fill:none; stroke-width:2; flex:0 0 auto; }
+
+  /* Режим готовки */
+  .cook-mode { position:fixed; inset:0; background:var(--paper); z-index:300; display:none; flex-direction:column; padding:max(20px,env(safe-area-inset-top)) 20px 20px; }
+  .cook-mode.open { display:flex; }
+  .cook-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .cook-head h2 { font-family:'Unbounded',sans-serif; font-size:18px; font-weight:600; flex:1; padding-right:12px; }
+  .cook-close { width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:var(--card); cursor:pointer; flex:0 0 auto; }
+  .cook-close svg { width:20px; height:20px; stroke:var(--ink); fill:none; stroke-width:2; }
+  .cook-step { flex:1; display:flex; flex-direction:column; justify-content:center; text-align:center; }
+  .cook-step .num { font-family:'Unbounded',sans-serif; font-size:15px; color:var(--accent); font-weight:600; margin-bottom:16px; }
+  .cook-step .txt { font-size:24px; line-height:1.4; font-weight:500; }
+  .cook-timer { margin:24px auto 0; }
+  .cook-timer button { background:var(--accent-soft); color:var(--accent); border:none; border-radius:100px; padding:12px 24px; font-size:16px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-family:'Unbounded',sans-serif; }
+  .cook-timer button svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; }
+  .cook-nav { display:flex; gap:12px; margin-top:24px; }
+  .cook-nav button { flex:1; padding:16px; border-radius:14px; border:none; font-size:16px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; }
+  .cook-nav .prev { background:var(--card); border:1.5px solid var(--line); color:var(--ink); }
+  .cook-nav .next { background:var(--accent); color:#fff; }
+
+  /* Таймер-бейдж в шаге */
+  .step-timer { display:inline-flex; align-items:center; gap:5px; background:var(--accent-soft); color:var(--accent);
+    border:none; border-radius:100px; padding:4px 11px; font-size:13px; font-weight:600; cursor:pointer; margin-top:6px; font-family:'Inter',sans-serif; }
+  .step-timer svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; }
+
+  /* Have at home */
+  .item.home { opacity:.5; } .item.home .item-name { text-decoration:line-through; }
+  .home-toggle { font-size:11px; color:var(--ink-soft); background:var(--paper); border:1px solid var(--line);
+    border-radius:100px; padding:3px 9px; cursor:pointer; margin-left:auto; }
+  .home-toggle.on { background:var(--green-soft); color:var(--green); border-color:transparent; }
+
+  /* Рейтинг звёзды */
+  .stars { display:flex; gap:4px; margin-bottom:10px; }
+  .stars svg { width:26px; height:26px; stroke:var(--accent); fill:none; stroke-width:1.5; cursor:pointer; }
+  .stars svg.on { fill:var(--accent); }
+  .note-input { width:100%; font-family:'Inter',sans-serif; font-size:14px; padding:11px 13px; border:1.5px solid var(--line);
+    border-radius:12px; outline:none; resize:vertical; min-height:60px; }
+  .note-input:focus { border-color:var(--accent); }
+
+  /* Хотелки */
+  .wish { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:8px; }
+  .wish .av { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; flex:0 0 auto; }
+  .wish .wtext { flex:1; font-size:14px; } .wish .wwho { font-size:11px; color:var(--ink-soft); }
+  .wish-del { border:none; background:transparent; color:var(--ink-soft); cursor:pointer; }
+  .wish-del svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+  .share-btn { width:100%; padding:13px; border-radius:14px; border:1.5px solid var(--line); background:var(--card);
+    color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px; }
+  .share-btn svg { width:18px; height:18px; stroke:var(--accent); fill:none; stroke-width:2; }
+  /* v5: фильтры, «из того, что есть», редактирование, порции */
+  .chip.tool { background:var(--ink); border-color:var(--ink); color:#fff; }
+  .chip.tool.has { background:var(--accent); border-color:var(--accent); }
+  .active-facets { display:flex; flex-wrap:wrap; gap:6px; margin:-2px 0 8px; }
+  .active-facets:empty { display:none; }
+  .af { font-size:12px; font-weight:600; padding:5px 10px; border-radius:100px; background:var(--accent-soft); color:var(--accent); cursor:pointer; }
+  .fgroup { margin-bottom:16px; }
+  .fgroup h4 { font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+  .fopts { display:flex; flex-wrap:wrap; gap:7px; }
+  .opt { font-size:13px; font-weight:500; padding:7px 12px; border-radius:100px; border:1.5px solid var(--line); background:var(--card); cursor:pointer; }
+  .opt.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .opt small { opacity:.6; margin-left:3px; }
+  .sheet-foot { position:sticky; bottom:calc(-1 * max(20px,env(safe-area-inset-bottom))); background:var(--paper); display:flex; gap:10px; padding:12px 0 4px; margin-top:8px; }
+  .sheet-foot .btn { padding:13px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; text-transform:uppercase; letter-spacing:.4px; }
+  .field input, .field select, .field textarea { width:100%; font-family:'Inter',sans-serif; font-size:15px; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); outline:none; }
+  .field textarea { min-height:140px; resize:vertical; line-height:1.5; }
+  .ing-edit { display:flex; gap:6px; margin-bottom:6px; }
+  .ing-edit input { font-family:'Inter',sans-serif; font-size:14px; padding:9px 10px; border:1.5px solid var(--line); border-radius:9px; background:var(--card); outline:none; min-width:0; }
+  .ing-edit .n { flex:1; } .ing-edit .q { flex:0 0 62px; } .ing-edit .u { flex:0 0 74px; }
+  .ing-edit button { flex:0 0 34px; border:none; background:var(--paper); color:var(--ink-soft); border-radius:9px; cursor:pointer; font-size:16px; }
+  .link-btn { background:none; border:none; color:var(--accent); font-size:14px; font-weight:600; cursor:pointer; padding:6px 0; }
+  .tag.edit { background:var(--ink); color:#fff; border-color:var(--ink); cursor:pointer; }
+  .have-in { display:flex; gap:8px; margin-bottom:8px; }
+  .have-in input { flex:1; font-family:'Inter',sans-serif; font-size:16px; padding:11px 13px; border:1.5px solid var(--line); border-radius:12px; outline:none; background:var(--card); }
+  .have-in input:focus { border-color:var(--accent); }
+  .sugg { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .sugg .opt { font-size:12px; padding:5px 10px; }
+  .have-sel { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+  .have-sel .opt { background:var(--green-soft); border-color:transparent; color:var(--green); }
+  .hnote { font-size:12px; color:var(--ink-soft); margin-bottom:14px; line-height:1.4; }
+  .hres h4 { font-family:'Unbounded',sans-serif; font-size:13px; font-weight:600; margin:14px 0 8px; }
+  .hrow { display:flex; align-items:center; gap:10px; padding:9px; background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:7px; cursor:pointer; }
+  .hrow img, .hrow .noimg { width:46px; height:46px; border-radius:9px; object-fit:cover; flex:0 0 auto; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; }
+  .hrow .ht { flex:1; min-width:0; font-size:14px; font-weight:500; line-height:1.3; }
+  .hrow .hm { font-size:12px; color:var(--warn); margin-top:2px; }
+  .hrow button { flex:0 0 auto; border:none; background:var(--accent-soft); color:var(--accent); border-radius:9px; padding:7px 9px; font-size:12px; font-weight:600; cursor:pointer; }
+  .mp-por { display:inline-flex; align-items:center; gap:6px; margin-top:4px; font-size:12px; color:var(--ink-soft); }
+  .mp-por button { width:22px; height:22px; border-radius:50%; border:1px solid var(--line); background:var(--card); cursor:pointer; font-size:13px; line-height:1; color:var(--ink); }
+  .pantry { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .pantry .opt { font-size:12px; padding:5px 10px; }
+  .group-title.pantry-t { color:var(--ink-soft); }
+  .chip.tool.havec { background:var(--green-soft); border-color:transparent; color:var(--green); }
+  .sheet.tall { max-height:92vh; }
+  .iconbtn.edit { right:60px; }
+  .slot-pick { display:flex; gap:6px; margin-bottom:12px; }
+  .slot-pick .opt { flex:1; text-align:center; }
+  .meal-info { cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- ===== ГАЛЕРЕЯ ===== -->
+<div class="screen active" id="screen-gallery">
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">Мои<span>рецепты</span></div>
+      <div class="profile-btn" id="profileBtn">
+        <span class="av" id="profAv">💪</span><span id="profName">Андрей</span>
+      </div>
+    </div>
+    <div class="search">
+      <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input type="text" id="search" placeholder="Найти рецепт…" autocomplete="off">
+    </div>
+    <div id="todayBlock"></div>
+    <div class="filters" id="filters"></div>
+    <div class="active-facets" id="activeFacets"></div>
+    <div class="count" id="count"></div>
+    <div id="galleryState" class="state"><div class="spinner"></div>Загружаю рецепты…</div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<!-- ===== КАРТОЧКА ===== -->
+<div class="screen" id="screen-card"></div>
+
+<!-- ===== ПЛАН ===== -->
+<div class="screen" id="screen-plan">
+  <div class="wrap">
+    <div class="topbar"><div class="brand">План <span>недели</span></div></div>
+    <div class="week-nav">
+      <button id="weekPrev"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="lbl" id="weekLabel">Эта неделя</div>
+      <button id="weekNext"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>
+    <div class="trip">
+      <svg viewBox="0 0 24 24"><path d="M6 2l1.5 4.5h9L18 2M3 6h18l-2 13a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>
+      <span>Еду в магазин:</span>
+      <select id="tripDay"></select>
+    </div>
+    <div id="advisor"></div>
+    <div class="hints" id="planHints">
+      <div class="hint" id="hintOld"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Давно не готовил</div>
+      <div class="hint" id="hintRandom"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg>Удиви меня</div>
+    </div>
+    <div id="days"></div>
+  </div>
+  <div class="cta">
+    <button id="buildShopping"><svg viewBox="0 0 24 24"><path d="M6 2l1.5 4.5h9L18 2M3 6h18l-2 13a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>Собрать список закупок</button>
+  </div>
+</div>
+
+<!-- ===== ЗАКУПКИ ===== -->
+<div class="screen" id="screen-shop">
+  <div class="wrap">
+    <div class="topbar"><div class="brand">Список <span>закупок</span></div></div>
+    <div class="toggle">
+      <button class="active" data-mode="grouped">По категориям</button>
+      <button data-mode="merged">Одним списком</button>
+    </div>
+    <div id="shopContent"></div>
+  </div>
+</div>
+
+<!-- ===== СЕМЬЯ ===== -->
+<div class="screen" id="screen-family">
+  <div class="wrap">
+    <div class="topbar"><div class="brand">Семья <span>и хотелки</span></div></div>
+    <div id="familyContent" class="state"><div class="spinner"></div>Загружаю…</div>
+  </div>
+</div>
+
+<!-- ===== ИЗ ТОГО, ЧТО ЕСТЬ ===== -->
+<div class="screen" id="screen-have">
+  <div class="wrap">
+    <div class="topbar"><div class="brand">Из того, <span>что есть</span></div>
+      <div class="profile-btn" id="haveBack">✕ Закрыть</div></div>
+    <div class="have-in"><input id="haveInput" placeholder="Что есть? Напр. курица, сыр…" autocomplete="off" enterkeyhint="done"></div>
+    <div class="have-sel" id="haveSel"></div>
+    <div class="sugg" id="haveSugg"></div>
+    <div class="hnote" id="pantryNote"></div>
+    <div class="hres" id="haveRes"></div>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav class="nav" id="nav">
+  <a data-screen="gallery" class="active"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Рецепты</a>
+  <a data-screen="plan"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>План недели</a>
+  <a data-screen="shop"><svg viewBox="0 0 24 24"><path d="M6 2l1.5 4.5h9L18 2M3 6h18l-2 13a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>Закупки</a>
+  <a data-screen="family"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 014-4h8a4 4 0 014 4v2"/></svg>Семья</a>
+</nav>
+
+<!-- Режим готовки -->
+<div class="cook-mode" id="cookMode">
+  <div class="cook-head">
+    <h2 id="cookTitle"></h2>
+    <button class="cook-close" id="cookClose"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+  </div>
+  <div class="cook-step">
+    <div class="num" id="cookNum"></div>
+    <div class="txt" id="cookTxt"></div>
+    <div class="cook-timer" id="cookTimerWrap"></div>
+  </div>
+  <div class="cook-nav">
+    <button class="prev" id="cookPrev">← Назад</button>
+    <button class="next" id="cookNext">Дальше →</button>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ ПОДКЛЮЧЕНИЕ ============
+const SUPABASE_URL = "https://tbckyicwfnciulrshcqc.supabase.co";
+const SUPABASE_KEY = "sb_publishable_WqAND6BXeQpBn1ZJEIh3GA_rVN7DkmD";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// видео отдаёт сервер бота; страница может жить где угодно (GitHub Pages)
+const MEDIA_BASE = "https://recipe-app-hd3n.onrender.com";
+function mediaUrl(u){ return (u&&u.startsWith('/'))?MEDIA_BASE+u:u; }
+let _woke=0;
+function wakeServer(){ if(Date.now()-_woke<300000) return; _woke=Date.now(); fetch(MEDIA_BASE+'/',{mode:'no-cors'}).catch(()=>{}); }
+
+// ============ СПРАВОЧНИК (как в боте) ============
+const FOOD_TYPES=["Курица","Индейка","Говядина","Свинина","Баранина","Фарш","Лосось и форель","Рыба","Морепродукты","Яйца","Овощи","Грибы","Бобовые","Крупы","Паста","Творог и сыр","Фрукты и ягоды","Другое"];
+const FGROUPS=["Тип блюда","Продукт","Приём пищи","Время","Особенности","Кухня","Метод"];
+const ING_CATS=["Мясо и птица","Рыба и морепродукты","Овощи и зелень","Фрукты и ягоды","Молочное и яйца","Бакалея","Специи и приправы","Соусы и масла","Напитки","Другое"];
+const HOME_CAT="Обычно есть дома";
+const DEFAULT_PANTRY=["соль","перец","перец черный","специи","сахар","мука","вода","кипяток","лед","масло растительное","масло подсолнечное","масло оливковое"];
+const HIDE_TAGS=["Любимое","На всю семью"];
+const OPT_RE=/по вкусу|для подачи|по желанию|при желании|для украшения|опционально|для смазывания|для жарки|для обжарки|для посыпки/;
+
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function cap(s){ s=(s||'').trim(); return s?s[0].toUpperCase()+s.slice(1):s; }
+// «МИСО-РАМЕН с ТОФУ» → «Мисо-рамен с тофу»
+function prettyTitle(t){ t=(t||'').replace(/\s+/g,' ').trim(); if(!t) return 'Без названия';
+  t=t.split(' ').map((w,n)=>{ const L=[...w].filter(c=>c.toLowerCase()!==c.toUpperCase()); return (L.length>1||(L.length===1&&n>0))&&L.every(c=>c===c.toUpperCase())?w.toLowerCase():w; }).join(' ');
+  return t[0].toUpperCase()+t.slice(1); }
+function plural(n,w){ return w[n%10===1&&n%100!==11?0:n%10>=2&&n%10<=4&&(n%100<10||n%100>20)?1:2]; }
+function fmtNum(x){ return String(Math.round(x*100)/100).replace('.',','); }
+
+// ---- продукты: нормальное имя, «всегда дома», «по вкусу», совпадение ----
+function norm(s){ return (s||'').toLowerCase().replace(/ё/g,'е').replace(/\([^)]*\)/g,' ').split(/[,;]/)[0].replace(/[^a-zа-я\s-]/g,' ').replace(/\s+/g,' ').trim(); }
+function keyOf(s){ return norm(s).split(' ').filter(Boolean).sort().join(' '); }
+function ingKey(i){ return keyOf(i.base||i.name); }
+function ingLabel(i){ return cap((i.base||i.name||'').replace(/\([^)]*\)/g,'').split(',')[0].trim()); }
+function stem(w){ return w.length<=3?w:w.length===4?w.slice(0,3):w.slice(0,4); }
+function isOptional(i){ const n=(i.name||'').toLowerCase(), u=(i.unit||'').toLowerCase(); return u==='по вкусу'||OPT_RE.test(n)||OPT_RE.test(u); }
+function inPantry(i){ if(state.pantrySpices&&i.cat==='Специи и приправы') return true; const k=ingKey(i); if(!k) return false;
+  const ks=k.split(' ').map(stem);
+  return state.pantry.some(p=>{ const pk=keyOf(p); if(!pk) return false; if(pk===k) return true; const pw=pk.split(' ');
+    if(pw.length===1&&['перец','масло','лук','сыр','зелень'].includes(pw[0])) return false; return pw.every(w=>ks.includes(stem(w))); }); }
+function haveMatch(h,i){ const k=ingKey(i); h=keyOf(h); if(!h||!k) return false; if(k===h) return true;
+  const ks=k.split(' ').map(stem); const hw=h.split(' ').filter(w=>w.length>=3); return hw.length>0&&hw.every(w=>ks.includes(stem(w))); }
+
+// ---- теги и фильтры ----
+function tagGroup(t){ if(['Суп','Салат'].includes(t.name)) return 'Тип блюда'; const g=t.group_name; if(['Питание','Для кого','Особые'].includes(g)) return 'Особенности'; return g||'Другое'; }
+function visibleTags(){ return state.tags.filter(t=>!HIDE_TAGS.includes(t.name)); }
+function keyLabel(k){ if(k.startsWith('ft:')) return k.slice(3); const t=state.tags.find(x=>x.id===+k.slice(4)); return t?t.name:'?'; }
+function keyMatch(r,k){ if(k.startsWith('ft:')) return r.food_type===k.slice(3); const id=+k.slice(4); return (r.recipe_tags||[]).some(rt=>rt.tag_id===id); }
+function facetMatch(r,facets){ for(const g in facets){ const ks=facets[g]; if(ks&&ks.length&&!ks.some(k=>keyMatch(r,k))) return false; } return true; }
+function facetCount(facets){ return Object.values(facets).reduce((s,a)=>s+(a?a.length:0),0); }
+function matchQuery(r,q){ q=(q||'').toLowerCase().replace(/ё/g,'е').trim(); if(!q) return true;
+  if((r.title||'').toLowerCase().replace(/ё/g,'е').includes(q)) return true;
+  return (r.ingredients||[]).some(i=>((i.base||'')+' '+(i.name||'')).toLowerCase().replace(/ё/g,'е').includes(q)); }
+function passQuick(r,f){
+  if(f==='fav') return isFav(r); if(f==='pp') return hasTag(r,'ПП'); if(f==='kids') return hasTag(r,'Для детей');
+  if(f==='quick') return hasTag(r,'Быстро (<30 мин)');
+  if(f==='old'){ if(!r.last_cooked_at) return true; return (Date.now()-new Date(r.last_cooked_at))/864e5>=30; }
+  return true; }
+function filteredRecipes(facets){ const f=state.filter;
+  return state.recipes.filter(r=>{
+    if(state.query&&!matchQuery(r,state.query)&&!(isHack(r)&&(r.recipe_text||'').toLowerCase().includes(state.query.toLowerCase()))) return false;
+    if(f==='hacks') return isHack(r);
+    if(isHack(r)) return false;
+    return passQuick(r,f)&&facetMatch(r,facets||state.facets);
+  }); }
+function facetOptions(){ const D=dishes(); const res={}; FGROUPS.forEach(g=>res[g]=[]);
+  const fc={}; D.forEach(r=>{ if(r.food_type) fc[r.food_type]=(fc[r.food_type]||0)+1; });
+  res['Продукт']=[...FOOD_TYPES.filter(f=>fc[f]),...Object.keys(fc).filter(f=>!FOOD_TYPES.includes(f)).sort()].map(f=>({key:'ft:'+f,label:f,n:fc[f]}));
+  const tc={}; D.forEach(r=>(r.recipe_tags||[]).forEach(rt=>tc[rt.tag_id]=(tc[rt.tag_id]||0)+1));
+  visibleTags().forEach(t=>{ const g=tagGroup(t); if(!res[g]) res[g]=[]; if(tc[t.id]) res[g].push({key:'tag:'+t.id,label:t.name,n:tc[t.id]}); });
+  return res; }
+
+// ---- единицы для закупок ----
+const UNIT_MAP=[[/^(г|гр|грамм\S*|g)$/,'г'],[/^(кг|килограмм\S*|kg)$/,'кг'],[/^(мл|ml|миллилитр\S*)$/,'мл'],[/^(л|литр\S*)$/,'л'],
+  [/^ст\.?\s?л\.?$|^столов\S* лож\S*$|^ст\.? ложк\S*$/,'ст.л.'],[/^ч\.?\s?л\.?$|^чайн\S* лож\S*$|^ч\.? ложк\S*$/,'ч.л.'],
+  [/^(шт|штук\S*|штуки)\.?$/,'шт'],[/^(зуб\S*)$/,'зубчик'],[/^(веточ\S*|вет\.)$/,'веточка'],[/^(пуч\S*)$/,'пучок'],[/^(щепот\S*)$/,'щепотка'],
+  [/^(стакан\S*)$/,'стакан'],[/^(банк\S*)$/,'банка'],[/^(упак\S*|уп\.?|пачк\S*)$/,'упаковка'],[/^(лист\S*)$/,'лист'],[/^(ломт\S*)$/,'ломтик'],[/^(головк\S*|голов\S*)$/,'головка'],[/^(кусоч\S*|кус\S*)$/,'кусок']];
+function normUnit(u){ u=(u||'').toLowerCase().replace(/ё/g,'е').trim(); if(!u) return ''; if(/[а-я]/.test(u)) u=u.replace(/l/g,'л'); for(const [re,v] of UNIT_MAP) if(re.test(u)) return v; return u; }
+function toBase(q,u){ if(u==='кг') return [q*1000,'г']; if(u==='л') return [q*1000,'мл']; return [q,u]; }
+function fmtPart(q,u){
+  if(u==='г') return q>=1000?fmtNum(Math.round(q/10)/100)+' кг':Math.round(q)+' г';
+  if(u==='мл') return q>=1000?fmtNum(Math.round(q/10)/100)+' л':Math.round(q)+' мл';
+  if(['шт','зубчик','банка','упаковка','пучок','головка'].includes(u)) q=Math.ceil(q-1e-9);
+  return fmtNum(q)+(u?' '+u:''); }
+
+// ---- «всегда дома» (общий для семьи) ----
+async function loadPantry(){ let v=null;
+  try{ const {data,error}=await db.from('app_settings').select('value').eq('key','pantry').maybeSingle(); if(!error&&data) v=data.value; }catch(e){}
+  if(!v){ try{ v=JSON.parse(localStorage.getItem('pantry')||'null'); }catch(e){} }
+  state.pantry=(v&&Array.isArray(v.items))?v.items:DEFAULT_PANTRY.slice(); state.pantrySpices=v?v.spices!==false:true; state._keys=null; }
+async function savePantry(){ const v={items:state.pantry,spices:state.pantrySpices}; state._keys=null;
+  try{ localStorage.setItem('pantry',JSON.stringify(v)); }catch(e){}
+  try{ await db.from('app_settings').upsert({key:'pantry',value:v},{onConflict:'key'}); }catch(e){} }
+
+const DAYS = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
+const SLOTS = [["breakfast","Завтрак"],["lunch","Обед"],["dinner","Ужин"]];
+const PERISHABLE = { "рыба":2,"лосось":2,"треска":2,"курица":3,"фарш":2,"зелень":3,"базилик":3,"укроп":3,
+  "кинза":3,"петрушка":3,"авокадо":3,"сливки":5,"молоко":5,"творог":5,"сметана":6,"сыр":10,"яйц":14 };
+
+let state = {
+  profile:null, profiles:[], recipes:[], tags:[], filter:"all", query:"",
+  weekOffset:0, plan:{}, planById:{}, tripDay:2, shopItems:[], myItems:[], shopMode:"grouped",
+  facets:{}, have:[], pantry:DEFAULT_PANTRY.slice(), pantrySpices:true, prevScreen:"gallery", _keys:null
+};
+
+// ============ УТИЛИТЫ ============
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+function fmtQty(q){ if(q==null) return ""; return Number.isInteger(q)?q:Math.round(q*100)/100; }
+function isVid(p){ return !!p && p.media_type==='video'; }
+function isHack(r){ return r.kind==='lifehack'; }
+function dishes(){ return state.recipes.filter(r=>!isHack(r)); }
+function photoUrl(r){ const ph=(r.recipe_photos||[]).filter(p=>!isVid(p)); return ph.length?(ph.find(p=>p.is_primary)||ph[0]).photo_url:null; }
+function videoUrl(r){ const v=(r.recipe_photos||[]).find(isVid); return v?mediaUrl(v.photo_url):null; }
+function coverHtml(r){ const img=photoUrl(r); if(img) return `<img src="${img}" loading="lazy" alt="">`;
+  const v=videoUrl(r); if(v) return `<video src="${v}#t=0.1" muted playsinline preload="metadata"></video><span class="play">▶</span>`;
+  return `<div class="noimg">${isHack(r)?'💡':'🍽'}</div>`; }
+function sortedMedia(r){ return [...(r.recipe_photos||[])].sort((a,b)=>(isVid(a)-isVid(b))||((b.is_primary?1:0)-(a.is_primary?1:0))); }
+function perishDays(name){ const n=(name||"").toLowerCase(); for(const k in PERISHABLE){ if(n.includes(k)) return PERISHABLE[k]; } return 99; }
+function recipePerish(r){ let m=99; (r.ingredients||[]).forEach(i=>{ m=Math.min(m,perishDays(i.name)); }); return m; }
+
+function mondayOf(offset){ const d=new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day+offset*7); d.setHours(0,0,0,0); return d; }
+function dateKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// ============ ЗАГРУЗКА ДАННЫХ ============
+async function loadProfiles(){
+  const { data } = await db.from('profiles').select('*').order('id');
+  state.profiles = data||[];
+  if(!state.profile && state.profiles.length) state.profile = state.profiles[0];
+  if(state.profile){ document.getElementById('profAv').textContent=state.profile.emoji; document.getElementById('profName').textContent=state.profile.name; }
+}
+
+async function loadTags(){
+  const { data } = await db.from('tags').select('*').order('id');
+  state.tags = data||[];
+}
+
+async function loadRecipes(){
+  const { data, error } = await db.from('recipes')
+    .select('*, recipe_photos(*), recipe_tags(tag_id), recipe_ratings(*)')
+    .eq('status','ready').order('created_at',{ascending:false});
+  if(error){ console.error(error); }
+  state.recipes = data||[];
+  state.recipes.forEach(r=>{ r.title=prettyTitle(r.title); });
+  state._keys=null;
+}
+
+// ============ ГАЛЕРЕЯ ============
+function buildFilters(){
+  const nf=facetCount(state.facets);
+  const quick=[{key:"all",label:"Все"},{key:"fav",label:"★ Избранное"},{key:"pp",label:"ПП",cls:"pp"},{key:"kids",label:"Детям"},
+    {key:"quick",label:"Быстро"},{key:"old",label:"Давно не готовил"},{key:"hacks",label:"💡 Лайфхаки"}];
+  const box=document.getElementById('filters');
+  box.innerHTML=`<div class="chip tool ${nf?'has':''}" id="fOpen">⚙︎ Фильтры${nf?' · '+nf:''}</div><div class="chip tool havec" id="fHave">🧺 Из того, что есть</div>`+
+    quick.map(f=>`<div class="chip ${f.cls||''} ${state.filter===f.key?'active':''}" data-key="${f.key}">${f.label}</div>`).join('');
+  box.querySelectorAll('.chip[data-key]').forEach(c=>c.onclick=()=>{ state.filter=c.dataset.key; renderGallery(); });
+  document.getElementById('fOpen').onclick=openFilterSheet;
+  document.getElementById('fHave').onclick=()=>showScreen('have');
+  const af=document.getElementById('activeFacets');
+  const chips=[]; for(const g in state.facets) (state.facets[g]||[]).forEach(k=>chips.push(`<span class="af" data-g="${esc(g)}" data-k="${esc(k)}">${esc(keyLabel(k))} ✕</span>`));
+  af.innerHTML=state.filter==='hacks'?'':chips.join('')+(chips.length>1?`<span class="af" id="afClear" style="background:var(--paper);color:var(--ink-soft)">Сбросить всё</span>`:'');
+  af.querySelectorAll('.af[data-k]').forEach(el=>el.onclick=()=>{ const g=el.dataset.g; state.facets[g]=(state.facets[g]||[]).filter(k=>k!==el.dataset.k); renderGallery(); });
+  const cl=document.getElementById('afClear'); if(cl) cl.onclick=()=>{ state.facets={}; renderGallery(); };
+}
+
+function hasTag(r,name){ const ids=(r.recipe_tags||[]).map(rt=>rt.tag_id); return state.tags.some(t=>t.name===name&&ids.includes(t.id)); }
+function isFav(r){ return (r.recipe_ratings||[]).some(x=>x.profile_id===state.profile?.id&&x.is_favorite); }
+
+function renderGallery(){
+  buildFilters();
+  renderTodayBlock();
+  document.getElementById('galleryState').classList.add('hidden');
+  let list=filteredRecipes();
+  if(state.filter==="old") list.sort((a,b)=> new Date(a.last_cooked_at||0)-new Date(b.last_cooked_at||0));
+  const n=list.length;
+  const w=state.filter==="hacks"?['лайфхак','лайфхака','лайфхаков']:['рецепт','рецепта','рецептов'];
+  document.getElementById('count').textContent=`${n} ${plural(n,w)}`;
+  const grid=document.getElementById('grid');
+  if(!n){ grid.innerHTML=`<div class="state" style="grid-column:1/-1">Ничего не нашлось. Поменяй фильтры или поиск.</div>`; return; }
+  grid.innerHTML=list.map(r=>`<div class="recipe" data-id="${r.id}">
+      <div class="photo">${coverHtml(r)}
+        ${r.food_type?`<span class="tab">${esc(r.food_type)}</span>`:''}
+        <button class="fav ${isFav(r)?'on':''}" data-fav="${r.id}"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+      </div>
+      <div class="rbody"><div class="rtitle">${esc(r.title||'Без названия')}</div>
+        <div class="rmeta">${hasTag(r,"ПП")?'<span class="pill pp">ПП</span>':''}${hasTag(r,"Быстро (<30 мин)")?'<span class="pill">⏱ быстро</span>':''}${r.kcal?`<span class="pill kcal">${r.kcal} ккал</span>`:''}</div>
+      </div></div>`).join('');
+  grid.querySelectorAll('.fav').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); await toggleFav(+b.dataset.fav); });
+  grid.querySelectorAll('.recipe').forEach(c=>c.onclick=()=>openCard(+c.dataset.id));
+}
+
+// Окно «Фильтры»: внутри группы — «или», между группами — «и»
+function openFilterSheet(){
+  const sheet=document.getElementById('sheet'); sheet.classList.add('tall');
+  const draft={}; for(const g in state.facets) draft[g]=[...(state.facets[g]||[])];
+  const opts=facetOptions();
+  const groups=[...FGROUPS,...Object.keys(opts).filter(g=>!FGROUPS.includes(g))].filter(g=>opts[g]&&opts[g].length);
+  const draw=()=>{
+    const n=filteredRecipes(draft).length;
+    sheet.innerHTML=`<h3>Фильтры</h3>`+groups.map(g=>`<div class="fgroup"><h4>${esc(g)}</h4><div class="fopts">${opts[g].map(o=>`<span class="opt ${(draft[g]||[]).includes(o.key)?'on':''}" data-g="${esc(g)}" data-k="${esc(o.key)}">${esc(o.label)}<small>${o.n}</small></span>`).join('')}</div></div>`).join('')+
+      `<div class="sheet-foot"><button class="btn btn-second" id="fReset">Сбросить</button><button class="btn btn-primary" id="fApply">Показать ${n}</button></div>`;
+    sheet.querySelectorAll('.opt').forEach(el=>el.onclick=()=>{ const g=el.dataset.g,k=el.dataset.k; const a=draft[g]=draft[g]||[]; const i=a.indexOf(k); if(i>=0) a.splice(i,1); else a.push(k); const st=sheet.scrollTop; draw(); sheet.scrollTop=st; });
+    document.getElementById('fReset').onclick=()=>{ for(const g in draft) draft[g]=[]; draw(); };
+    document.getElementById('fApply').onclick=()=>{ state.facets=draft; if(state.filter==='hacks') state.filter='all'; closeModal(); renderGallery(); };
+  };
+  draw(); openModal();
+}
+
+// ============ ИЗ ТОГО, ЧТО ЕСТЬ ============
+function saveHave(){ try{ localStorage.setItem('have',JSON.stringify(state.have)); }catch(e){} }
+function allIngKeys(){
+  if(state._keys) return state._keys;
+  const cnt={}, lbl={};
+  dishes().forEach(r=>(r.ingredients||[]).forEach(i=>{ if(isOptional(i)||inPantry(i)) return; const k=ingKey(i); if(!k||k.length<2) return; cnt[k]=(cnt[k]||0)+1; if(!lbl[k]) lbl[k]=ingLabel(i); }));
+  state._keys=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).map(k=>({k,label:lbl[k],n:cnt[k]}));
+  return state._keys;
+}
+function haveResults(){
+  const H=state.have; if(!H.length) return [];
+  const out=[];
+  dishes().forEach(r=>{ const ings=r.ingredients||[]; if(!ings.length) return;
+    let used=0; const miss=[];
+    ings.forEach(i=>{ if(H.some(h=>haveMatch(h,i))){ used++; return; } if(isOptional(i)||inPantry(i)) return;
+      const nm=ingLabel(i); if(nm&&!miss.some(x=>keyOf(x)===keyOf(nm))) miss.push(nm); });
+    if(used&&miss.length<=2) out.push({r,used,miss});
+  });
+  return out.sort((a,b)=>a.miss.length-b.miss.length||b.used-a.used);
+}
+function addHave(text){ text=(text||'').trim(); if(!text||!keyOf(text)) return; if(!state.have.some(h=>keyOf(h)===keyOf(text))) state.have.push(text); saveHave(); renderHave(); }
+function renderHave(){
+  const sel=document.getElementById('haveSel');
+  sel.innerHTML=state.have.map((h,i)=>`<span class="opt" data-hi="${i}">${esc(h)} ✕</span>`).join('')+(state.have.length>1?`<span class="opt" id="haveClear" style="background:var(--paper);color:var(--ink-soft)">очистить</span>`:'');
+  sel.querySelectorAll('[data-hi]').forEach(el=>el.onclick=()=>{ state.have.splice(+el.dataset.hi,1); saveHave(); renderHave(); });
+  const hc=document.getElementById('haveClear'); if(hc) hc.onclick=()=>{ state.have=[]; saveHave(); renderHave(); };
+  renderHaveSugg();
+  document.getElementById('pantryNote').innerHTML=`Считаю, что дома всегда есть: <b>${esc(state.pantry.join(', '))}</b>${state.pantrySpices?' и все специи':''}. Всё «по вкусу» и «для подачи» не учитываю. <button class="link-btn" id="pantryEdit">Изменить</button>`;
+  document.getElementById('pantryEdit').onclick=openPantryEditor;
+  const box=document.getElementById('haveRes');
+  if(!state.have.length){ box.innerHTML=`<div class="state" style="padding:24px 10px">Добавь, что есть в холодильнике — покажу, что можно приготовить и чего не хватает.</div>`; return; }
+  const res=haveResults();
+  if(!res.length){ box.innerHTML=`<div class="state" style="padding:24px 10px">Ничего не подобрал. Добавь ещё продуктов.</div>`; return; }
+  const titles=["✅ Можно готовить","Не хватает одного продукта","Не хватает двух продуктов"];
+  box.innerHTML=[0,1,2].map(m=>{ const L=res.filter(x=>x.miss.length===m); if(!L.length) return '';
+    return `<h4>${titles[m]} · ${L.length}</h4>`+L.map(x=>{ const img=photoUrl(x.r);
+      return `<div class="hrow" data-open="${x.r.id}">${img?`<img src="${img}" loading="lazy">`:`<div class="noimg">🍽</div>`}<div class="ht">${esc(x.r.title)}${x.miss.length?`<div class="hm">докупить: ${esc(x.miss.join(', '))}</div>`:''}</div>${x.miss.length?`<button data-buy="${esc(JSON.stringify(x.miss))}">＋ в закупки</button>`:''}</div>`; }).join(''); }).join('');
+  box.querySelectorAll('[data-open]').forEach(el=>el.onclick=()=>openCard(+el.dataset.open));
+  box.querySelectorAll('[data-buy]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation(); await addToMyItems(JSON.parse(b.dataset.buy)); b.textContent='✓ добавлено'; b.disabled=true; });
+}
+function renderHaveSugg(){
+  const q=norm(document.getElementById('haveInput').value); const taken=new Set(state.have.map(keyOf));
+  const L=allIngKeys().filter(x=>!taken.has(x.k)&&(!q||x.k.includes(q)||x.label.toLowerCase().replace(/ё/g,'е').includes(q))).slice(0,q?12:16);
+  const s=document.getElementById('haveSugg');
+  s.innerHTML=(q&&!L.some(x=>x.k===keyOf(q))?`<span class="opt on" data-add="${esc(document.getElementById('haveInput').value.trim())}">＋ ${esc(document.getElementById('haveInput').value.trim())}</span>`:'')+
+    L.map(x=>`<span class="opt" data-add="${esc(x.label)}">${esc(x.label)}</span>`).join('');
+  s.querySelectorAll('[data-add]').forEach(el=>el.onclick=()=>{ addHave(el.dataset.add); const inp=document.getElementById('haveInput'); inp.value=''; renderHaveSugg(); });
+}
+async function addToMyItems(names){
+  await loadShoppingList();
+  names.forEach(n=>{ if(!state.myItems.some(x=>keyOf(x.name)===keyOf(n))&&!state.shopItems.some(x=>keyOf(x.name)===keyOf(n)&&!x.done)) state.myItems.push({name:n,qty:'',unit:'',done:false,manual:true}); });
+  await saveShoppingList(); toast('Добавлено в закупки ✓');
+}
+function openPantryEditor(){
+  const sheet=document.getElementById('sheet');
+  let items=state.pantry.slice(), spices=state.pantrySpices;
+  const draw=()=>{
+    sheet.innerHTML=`<h3>Всегда есть дома</h3><div class="hnote">Эти продукты не попадают в «не хватает», а в списке закупок уходят в отдельный блок «${HOME_CAT}». Список общий для всей семьи.</div>
+      <div class="pantry">${items.map((p,i)=>`<span class="opt on" data-pi="${i}">${esc(p)} ✕</span>`).join('')}</div>
+      <div class="have-in"><input id="pantryIn" placeholder="Добавить, напр. чеснок"><button class="btn btn-primary" style="flex:0 0 52px;padding:0" id="pantryAdd">＋</button></div>
+      <label style="display:flex;gap:10px;align-items:center;font-size:14px;margin:8px 0 6px"><input type="checkbox" id="pantrySp" ${spices?'checked':''}> Все специи и приправы тоже есть</label>
+      <div class="sheet-foot"><button class="btn btn-second" id="pantryReset">Как было</button><button class="btn btn-primary" id="pantryDone">Готово</button></div>`;
+    sheet.querySelectorAll('[data-pi]').forEach(el=>el.onclick=()=>{ items.splice(+el.dataset.pi,1); draw(); });
+    const add=()=>{ const v=document.getElementById('pantryIn').value.trim().toLowerCase(); if(v&&!items.includes(v)) items.push(v); draw(); document.getElementById('pantryIn').focus(); };
+    document.getElementById('pantryAdd').onclick=add;
+    document.getElementById('pantryIn').onkeydown=e=>{ if(e.key==='Enter') add(); };
+    document.getElementById('pantrySp').onchange=e=>{ spices=e.target.checked; };
+    document.getElementById('pantryReset').onclick=()=>{ items=DEFAULT_PANTRY.slice(); spices=true; draw(); };
+    document.getElementById('pantryDone').onclick=async()=>{ state.pantry=items; state.pantrySpices=spices; await savePantry(); closeModal(); renderHave(); toast('Сохранено ✓'); };
+  };
+  draw(); openModal();
+}
+
+async function toggleFav(rid){
+  const r=state.recipes.find(x=>x.id===rid); const pid=state.profile?.id; if(!pid) return;
+  const existing=(r.recipe_ratings||[]).find(x=>x.profile_id===pid);
+  const newVal=!(existing&&existing.is_favorite);
+  await db.from('recipe_ratings').upsert({recipe_id:rid,profile_id:pid,is_favorite:newVal},{onConflict:'recipe_id,profile_id'});
+  if(existing) existing.is_favorite=newVal; else (r.recipe_ratings=r.recipe_ratings||[]).push({recipe_id:rid,profile_id:pid,is_favorite:newVal});
+  renderGallery();
+}
+
+// ============ КАРТОЧКА ============
+let cardState={ recipe:null, portions:2, kbMode:"portion", photoIdx:0 };
+function openCard(rid){
+  const r=state.recipes.find(x=>x.id===rid); if(!r) return;
+  cardState={recipe:r, portions:r.servings||2, kbMode:"portion", photoIdx:0};
+  const cur=document.querySelector('.screen.active'); const nm=cur?cur.id.replace('screen-',''):'gallery'; if(nm!=='card') state.prevScreen=nm;
+  renderCard(); showScreen('card');
+}
+function renderCard(){
+  const r=cardState.recipe; const photos=sortedMedia(r); if(photos.some(isVid)) wakeServer(); const base=r.servings||2; const k=cardState.portions/base;
+  const cur=photos[cardState.photoIdx];
+  const mainHtml=!cur?`<div class="noimg">${isHack(r)?'💡':'🍽'}</div>`:isVid(cur)?`<video src="${mediaUrl(cur.photo_url)}" controls playsinline preload="metadata"></video><div class="vnote">Первый запуск видео может занять до минуты</div>`:`<img id="cardMain" src="${cur.photo_url}">`;
+  const tagNames=visibleTags().filter(t=>(r.recipe_tags||[]).some(rt=>rt.tag_id===t.id)).sort((a,b)=>FGROUPS.indexOf(tagGroup(a))-FGROUPS.indexOf(tagGroup(b)));
+  const kb = cardState.kbMode==="portion"
+    ? {kcal:r.kcal,p:r.protein,f:r.fat,c:r.carbs}
+    : {kcal:r.kcal_100,p:r.protein_100,f:r.fat_100,c:r.carbs_100};
+  const ings=(r.ingredients||[]);
+  const steps=(r.recipe_text||"").split("\n").map(s=>s.replace(/^\s*\d+[\.\)]\s*/,'').trim()).filter(Boolean);
+  document.getElementById('screen-card').innerHTML=`
+    <div class="card-gallery">
+      <div class="card-main">${mainHtml}</div>
+      <button class="iconbtn back" id="cardBack"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button class="iconbtn edit" id="cardEdit"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+      <button class="iconbtn favc ${isFav(r)?'on':''}" id="cardFav"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+      <div class="thumbs">
+        ${photos.map((p,i)=>isVid(p)?`<div class="vthumb ${i===cardState.photoIdx?'active':''}" data-pi="${i}">▶</div>`:`<img src="${p.photo_url}" class="${i===cardState.photoIdx?'active':''}" data-pi="${i}">`).join('')}
+        <label class="thumb-add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept="image/*" id="photoUpload" style="display:none"></label>
+      </div>
+    </div>
+    <div class="card-content ${isHack(r)?'hack':''}">
+      <h1>${esc(r.title||'Без названия')}</h1>
+      <div class="tags">${r.food_type?`<span class="tag type">${r.food_type}</span>`:''}${tagNames.map(t=>`<span class="tag ${t.name==='ПП'?'pp':''}">${esc(t.name)}</span>`).join('')}</div>
+      <div class="actions">
+        <button class="btn btn-primary" id="addToPlan"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>В план недели</button>
+        <button class="btn btn-second" id="markCooked"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Готовил</button>
+      </div>
+      <div class="seclabel kbzhu-label">Пищевая ценность</div>
+      <div class="kbzhu">
+        <div class="kbzhu-head">
+          <div class="kbzhu-tab ${cardState.kbMode==='portion'?'active':''}" data-mode="portion">На порцию</div>
+          <div class="kbzhu-tab ${cardState.kbMode==='hundred'?'active':''}" data-mode="hundred">На 100 г</div>
+        </div>
+        <div class="kbzhu-grid">
+          <div class="kb kc"><div class="v">${kb.kcal??'—'}</div><div class="l">ккал</div></div>
+          <div class="kb"><div class="v">${kb.p??'—'}</div><div class="l">белки</div></div>
+          <div class="kb"><div class="v">${kb.f??'—'}</div><div class="l">жиры</div></div>
+          <div class="kb"><div class="v">${kb.c??'—'}</div><div class="l">углев</div></div>
+        </div>
+      </div>
+      <div class="ing-head"><div class="seclabel" style="margin:0">Ингредиенты</div>
+        <div class="portion"><button id="pMinus">−</button><span id="pLabel">${cardState.portions} порц.</span><button id="pPlus">+</button></div>
+      </div>
+      <div class="ing">${ings.length?ings.map(i=>{
+        if(i.qty==null||i.unit==='по вкусу') return `<div class="ing-row"><span>${i.name}</span><span class="q">по вкусу</span></div>`;
+        return `<div class="ing-row"><span>${i.name}</span><span class="q">${fmtQty(i.qty*k)} ${i.unit||''}</span></div>`;
+      }).join(''):'<div class="ing-row"><span class="q">Ингредиенты не заполнены</span></div>'}</div>
+      ${steps.length?`<div class="seclabel">Приготовление</div><div>${steps.map((s,i)=>`<div class="step"><div class="step-n">${i+1}</div><div class="step-t">${s}</div></div>`).join('')}</div>`:''}
+      ${r.notes?`<div class="note"><b>Заметка автора:</b> ${r.notes}</div>`:''}
+      <div class="seclabel">Моя оценка</div>
+      <div class="stars" id="cardStars">${[1,2,3,4,5].map(s=>`<svg viewBox="0 0 24 24" class="${(myRating(r).stars||0)>=s?'on':''}" data-star="${s}"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>`).join('')}</div>
+      <textarea class="note-input" id="myNote" placeholder="Моя заметка: «в след. раз меньше чеснока», «дети не едят»…">${myRating(r).note||''}</textarea>
+      <div style="height:18px"></div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:24px" id="cookBtn"><svg viewBox="0 0 24 24"><path d="M3 2l1 7h16l1-7M5 9v11a2 2 0 002 2h10a2 2 0 002-2V9"/></svg>Режим готовки</button>
+      ${r.source_url?`<div style="text-align:center;padding-bottom:20px"><a href="${r.source_url}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none">Источник рецепта ↗</a></div>`:''}
+      ${r.extra_url?`<div style="text-align:center;padding-bottom:20px"><a href="${r.extra_url}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none">Пост в Telegram ↗</a></div>`:''}
+    </div>`;
+  // обработчики
+  document.getElementById('cardBack').onclick=()=>showScreen(state.prevScreen||'gallery');
+  document.getElementById('cardEdit').onclick=()=>openEditor(r);
+  document.getElementById('cardFav').onclick=async()=>{ await toggleFav(r.id); renderCard(); };
+  document.querySelectorAll('#screen-card .kbzhu-tab').forEach(t=>t.onclick=()=>{ cardState.kbMode=t.dataset.mode; renderCard(); });
+  document.getElementById('pMinus').onclick=()=>{ if(cardState.portions>1){cardState.portions--; r._portionsTouched=true; renderCard();} };
+  document.getElementById('pPlus').onclick=()=>{ if(cardState.portions<20){cardState.portions++; r._portionsTouched=true; renderCard();} };
+  document.querySelectorAll('#screen-card .thumbs [data-pi]').forEach(im=>im.onclick=()=>{ cardState.photoIdx=+im.dataset.pi; renderCard(); });
+  document.getElementById('markCooked').onclick=()=>markCooked(r);
+  document.getElementById('addToPlan').onclick=()=>openPlanPicker(r);
+  const up=document.getElementById('photoUpload'); if(up) up.onchange=(e)=>uploadPhoto(e,r);
+  document.querySelectorAll('#cardStars svg').forEach(s=>s.onclick=()=>setRating(r,+s.dataset.star));
+  const nt=document.getElementById('myNote'); if(nt) nt.oninput=()=>saveNote(r,nt.value);
+  document.getElementById('cookBtn').onclick=()=>openCookMode(r);
+}
+
+// ============ РЕДАКТИРОВАНИЕ РЕЦЕПТА ============
+function openEditor(r){
+  const sheet=document.getElementById('sheet'); sheet.classList.add('tall');
+  const sel=new Set((r.recipe_tags||[]).map(rt=>rt.tag_id));
+  let ings=(r.ingredients||[]).map(i=>({...i}));
+  const groups={}; visibleTags().forEach(t=>{ const g=tagGroup(t); (groups[g]=groups[g]||[]).push(t); });
+  const gOrder=[...FGROUPS.filter(g=>groups[g]),...Object.keys(groups).filter(g=>!FGROUPS.includes(g))];
+  const fts=(!r.food_type||FOOD_TYPES.includes(r.food_type))?FOOD_TYPES:[r.food_type,...FOOD_TYPES];
+  const ingRows=()=>ings.map((i,x)=>`<div class="ing-edit"><input class="n" data-f="name" data-i="${x}" value="${esc(i.name)}" placeholder="Продукт"><input class="q" data-f="qty" data-i="${x}" value="${esc(i.qty??'')}" placeholder="кол-во" inputmode="decimal"><input class="u" data-f="unit" data-i="${x}" value="${esc(i.unit||'')}" placeholder="ед."><button data-del="${x}">✕</button></div>`).join('');
+  sheet.innerHTML=`<h3>Редактировать</h3>
+    <div class="field"><label>Название</label><input id="eTitle" value="${esc(r.title)}"></div>
+    <div class="field"><label>Что это</label><select id="eKind"><option value="recipe">Рецепт</option><option value="lifehack" ${isHack(r)?'selected':''}>Лайфхак</option></select></div>
+    <div class="field"><label>Главный продукт</label><select id="eFood"><option value="">—</option>${fts.map(f=>`<option ${f===r.food_type?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
+    <div class="field"><label>Порций в рецепте</label><input id="eServ" type="number" min="1" max="50" inputmode="numeric" value="${esc(r.servings||'')}"></div>
+    ${gOrder.map(g=>`<div class="fgroup"><h4>${esc(g)}</h4><div class="fopts">${groups[g].map(t=>`<span class="opt ${sel.has(t.id)?'on':''}" data-tid="${t.id}">${esc(t.name)}</span>`).join('')}</div></div>`).join('')}
+    <div class="field"><label>Ингредиенты</label><div id="eIngs">${ingRows()}</div><button class="link-btn" id="eAddIng">＋ Добавить строку</button></div>
+    <div class="field"><label>Приготовление — каждый шаг с новой строки</label><textarea id="eSteps">${esc(r.recipe_text||'')}</textarea></div>
+    <div class="field"><label>Заметка автора</label><textarea id="eNotes" style="min-height:70px">${esc(r.notes||'')}</textarea></div>
+    <button class="link-btn" id="eHide" style="color:var(--danger)">Скрыть рецепт из приложения</button>
+    <div class="sheet-foot"><button class="btn btn-second" id="eCancel">Отмена</button><button class="btn btn-primary" id="eSave">Сохранить</button></div>`;
+  const box=document.getElementById('eIngs');
+  const bindIngs=()=>{
+    box.querySelectorAll('input').forEach(inp=>inp.oninput=()=>{ ings[+inp.dataset.i][inp.dataset.f]=inp.value; });
+    box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ ings.splice(+b.dataset.del,1); box.innerHTML=ingRows(); bindIngs(); });
+  };
+  bindIngs();
+  document.getElementById('eAddIng').onclick=()=>{ ings.push({name:'',qty:'',unit:''}); box.innerHTML=ingRows(); bindIngs(); box.querySelector('.ing-edit:last-child .n').focus(); };
+  sheet.querySelectorAll('[data-tid]').forEach(el=>el.onclick=()=>{ const id=+el.dataset.tid; if(sel.has(id)) sel.delete(id); else sel.add(id); el.classList.toggle('on'); });
+  document.getElementById('eCancel').onclick=closeModal;
+  document.getElementById('eHide').onclick=async()=>{
+    if(!confirm('Скрыть рецепт? Он пропадёт из галереи (из базы не удаляется).')) return;
+    const { error }=await db.from('recipes').update({status:'hidden'}).eq('id',r.id);
+    if(error){ toast('Не получилось: '+error.message); return; }
+    state.recipes=state.recipes.filter(x=>x.id!==r.id); state._keys=null; closeModal(); showScreen('gallery'); toast('Рецепт скрыт');
+  };
+  document.getElementById('eSave').onclick=async()=>{
+    const old=r.ingredients||[];
+    const clean=ings.map(i=>{ const name=String(i.name||'').trim(); if(!name) return null;
+      const qs=String(i.qty??'').trim().replace(',','.'); let qty=qs===''?null:Number(qs); let unit=String(i.unit||'').trim();
+      if(qs!==''&&isNaN(qty)){ unit=unit||qs; qty=null; }
+      const o={name,qty,unit}; const prev=old.find(x=>x.name===name); if(prev){ if(prev.base) o.base=prev.base; if(prev.cat) o.cat=prev.cat; }
+      return o; }).filter(Boolean);
+    const sv=parseInt(document.getElementById('eServ').value,10);
+    const upd={ title:prettyTitle(document.getElementById('eTitle').value), kind:document.getElementById('eKind').value,
+      food_type:document.getElementById('eFood').value||null, servings:sv>0?sv:null, ingredients:clean,
+      recipe_text:document.getElementById('eSteps').value.trim(), notes:document.getElementById('eNotes').value.trim()||null };
+    const btn=document.getElementById('eSave'); btn.disabled=true; btn.textContent='Сохраняю…';
+    const { error }=await db.from('recipes').update(upd).eq('id',r.id);
+    if(error){ btn.disabled=false; btn.textContent='Сохранить'; toast('Не сохранилось: '+error.message); return; }
+    const tids=[...sel];
+    await db.from('recipe_tags').delete().eq('recipe_id',r.id);
+    if(tids.length) await db.from('recipe_tags').insert(tids.map(t=>({recipe_id:r.id,tag_id:t})));
+    Object.assign(r,upd); r.recipe_tags=tids.map(t=>({tag_id:t})); state._keys=null;
+    if(cardState.portions&&upd.servings&&!r._portionsTouched) cardState.portions=upd.servings;
+    closeModal(); renderCard(); toast('Сохранено ✓');
+  };
+  openModal();
+}
+
+async function markCooked(r){
+  const now=new Date().toISOString();
+  await db.from('recipes').update({last_cooked_at:now, cook_count:(r.cook_count||0)+1}).eq('id',r.id);
+  r.last_cooked_at=now; r.cook_count=(r.cook_count||0)+1; toast("Отмечено: приготовил ✓");
+}
+
+async function uploadPhoto(e,r){
+  const file=e.target.files[0]; if(!file) return;
+  toast("Загружаю фото…");
+  const path=`${r.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g,'_')}`;
+  const { error }=await db.storage.from('recipe-photos').upload(path,file);
+  if(error){ toast("Ошибка загрузки"); console.error(error); return; }
+  const { data:{publicUrl} }=db.storage.from('recipe-photos').getPublicUrl(path);
+  const isPrimary=!(r.recipe_photos&&r.recipe_photos.length);
+  await db.from('recipe_photos').insert({recipe_id:r.id,photo_url:publicUrl,is_primary:isPrimary});
+  r.recipe_photos=r.recipe_photos||[]; r.recipe_photos.push({recipe_id:r.id,photo_url:publicUrl,is_primary:isPrimary});
+  toast("Фото добавлено ✓"); renderCard();
+}
+
+// ============ ПЛАН ============
+function forEachPlanMeal(fn){ Object.values(state.plan).forEach(day=>Object.values(day).forEach(arr=>arr.forEach(fn))); }
+async function loadPlan(){
+  const monday=mondayOf(state.weekOffset); const dates=[...Array(7)].map((_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return dateKey(d);});
+  const { data }=await db.from('meal_plan').select('*, recipes(id,title,servings,ingredients,recipe_photos(photo_url,is_primary,media_type))')
+    .gte('plan_date',dates[0]).lte('plan_date',dates[6]).order('id');
+  state.plan={}; state.planById={};
+  (data||[]).forEach(mp=>{ if(!mp.recipes) return; mp.recipes.title=prettyTitle(mp.recipes.title);
+    const m={id:mp.id, recipe:mp.recipes, servings:mp.servings||mp.recipes.servings||2};
+    const d=(state.plan[mp.plan_date]=state.plan[mp.plan_date]||{}); (d[mp.meal_slot]=d[mp.meal_slot]||[]).push(m); state.planById[m.id]=m; });
+}
+
+function renderPlan(){
+  const monday=mondayOf(state.weekOffset);
+  const dates=[...Array(7)].map((_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
+  const today=dateKey(new Date());
+  document.getElementById('weekLabel').textContent= state.weekOffset===0?"Эта неделя":state.weekOffset===1?"Следующая неделя":state.weekOffset===-1?"Прошлая неделя":`${dates[0].getDate()}.${dates[0].getMonth()+1} – ${dates[6].getDate()}.${dates[6].getMonth()+1}`;
+  const sel=document.getElementById('tripDay');
+  if(sel.options.length!==7){ sel.innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d.toLowerCase()}</option>`).join(''); sel.value=state.tripDay; }
+  renderAdvisor(dates,today);
+  document.getElementById('days').innerHTML=dates.map((d,idx)=>{
+    const key=dateKey(d); const dayPlan=state.plan[key]||{}; const isToday=key===today;
+    const slots=SLOTS.map(([sk,sl])=>{
+      const meals=(dayPlan[sk]||[]).map(m=>{
+        const img=photoUrl(m.recipe);
+        const pd=recipePerish(m.recipe); const gap=idx-state.tripDay; let warn="";
+        if(gap>=0&&pd<99&&gap>pd){ const lvl=gap-pd>=2?"danger":"warn"; warn=`<div class="meal-warn ${lvl}"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>может не дожить</div>`; }
+        return `<div class="meal"><div>${img?`<img src="${img}">`:''}</div><div class="meal-info" data-open="${m.recipe.id}"><div class="meal-title">${esc(m.recipe.title)}</div>${warn}
+          <div class="mp-por"><button data-ps="${m.id}" data-d="-1">−</button>${m.servings} ${plural(m.servings,['порция','порции','порций'])}<button data-ps="${m.id}" data-d="1">+</button></div></div>
+          <button class="meal-del" data-mp="${m.id}"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`;
+      }).join('');
+      return `<div class="slot"><div class="slot-label">${sl}</div>${meals}<div class="add-meal" data-date="${key}" data-slot="${sk}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>${meals?'Ещё блюдо':'Добавить блюдо'}</div></div>`;
+    }).join('');
+    return `<div class="day ${isToday?'today':''}"><div class="day-head"><span class="day-name">${DAYS[idx]}</span><span class="day-date">${d.getDate()}.${d.getMonth()+1}</span></div>${slots}</div>`;
+  }).join('');
+  document.querySelectorAll('.meal-del').forEach(b=>b.onclick=async()=>{ await db.from('meal_plan').delete().eq('id',+b.dataset.mp); await loadPlan(); renderPlan(); });
+  document.querySelectorAll('.add-meal').forEach(b=>b.onclick=()=>openRecipePicker(b.dataset.date,b.dataset.slot));
+  document.querySelectorAll('#days .meal-info').forEach(el=>el.onclick=()=>{ const r=state.recipes.find(x=>x.id===+el.dataset.open); if(r) openCard(r.id); });
+  document.querySelectorAll('#days [data-ps]').forEach(b=>b.onclick=async(e)=>{ e.stopPropagation();
+    const m=state.planById[+b.dataset.ps]; if(!m) return; const v=Math.min(30,Math.max(1,m.servings+(+b.dataset.d))); if(v===m.servings) return;
+    m.servings=v; renderPlan(); await db.from('meal_plan').update({servings:v}).eq('id',m.id); });
+}
+
+function renderAdvisor(dates,today){
+  const box=document.getElementById('advisor'); const warns=[];
+  dates.forEach((d,idx)=>{ const dp=state.plan[dateKey(d)]||{}; Object.values(dp).forEach(arr=>arr.forEach(m=>{ const pd=recipePerish(m.recipe); const gap=idx-state.tripDay; if(gap>=0&&pd<99&&gap>pd) warns.push({title:m.recipe.title,day:DAYS[idx],gap,lvl:gap-pd>=2?"danger":"warn"}); })); });
+  if(!warns.length){ box.innerHTML=""; return; }
+  const danger=warns.some(w=>w.lvl==="danger");
+  box.innerHTML=`<div class="advisor ${danger?'danger':'warn'}"><div class="advisor-title"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>Консультант по свежести</div>Возможны проблемы со свежестью:<ul>${warns.map(w=>`<li><b>${esc(w.title)}</b> (${w.day}) — скоропортящиеся продукты, купи ближе к готовке.</li>`).join('')}</ul></div>`;
+}
+
+const SLOT_TAG={breakfast:'Завтрак',lunch:'Обед',dinner:'Ужин'};
+function openRecipePicker(date,slot){
+  const sheet=document.getElementById('sheet'); sheet.classList.add('tall');
+  sheet.innerHTML=`<h3>Выбери блюдо · ${SLOT_TAG[slot]||''}</h3><div class="have-in"><input id="pickQ" placeholder="Поиск по названию или продукту…"></div><div id="pickList"></div>`;
+  const draw=()=>{ const q=document.getElementById('pickQ').value;
+    const L=dishes().filter(r=>matchQuery(r,q)).sort((a,b)=>(hasTag(b,SLOT_TAG[slot])?1:0)-(hasTag(a,SLOT_TAG[slot])?1:0)).slice(0,100);
+    const box=document.getElementById('pickList');
+    box.innerHTML=L.map(r=>{const img=photoUrl(r);return `<div class="pick-recipe" data-pick="${r.id}">${img?`<img src="${img}" loading="lazy">`:`<div class="noimg">🍽</div>`}<div>${esc(r.title)}</div></div>`;}).join('')||'<div class="state">Ничего не нашлось</div>';
+    box.querySelectorAll('.pick-recipe').forEach(el=>el.onclick=async()=>{ const r=state.recipes.find(x=>x.id===+el.dataset.pick);
+      await db.from('meal_plan').insert({recipe_id:r.id,plan_date:date,meal_slot:slot,servings:r.servings||2});
+      closeModal(); await loadPlan(); renderPlan(); toast("Добавлено в план ✓"); });
+  };
+  document.getElementById('pickQ').oninput=draw; draw(); openModal();
+}
+
+function defaultSlot(r){ if(hasTag(r,'Ужин')) return 'dinner'; if(hasTag(r,'Обед')) return 'lunch'; if(hasTag(r,'Завтрак')) return 'breakfast'; return 'dinner'; }
+function openPlanPicker(r){
+  const sheet=document.getElementById('sheet'); const monday=mondayOf(state.weekOffset);
+  const dates=[...Array(7)].map((_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
+  let slot=defaultSlot(r);
+  const draw=()=>{
+    sheet.innerHTML=`<h3>Куда поставить?</h3><div class="slot-pick">${SLOTS.map(([k,l])=>`<span class="opt ${k===slot?'on':''}" data-sl="${k}">${l}</span>`).join('')}</div>`+
+      dates.map((d,i)=>`<div class="prof-item" data-d="${dateKey(d)}"><span class="nm">${DAYS[i]} (${d.getDate()}.${d.getMonth()+1})</span></div>`).join('');
+    sheet.querySelectorAll('[data-sl]').forEach(el=>el.onclick=()=>{ slot=el.dataset.sl; draw(); });
+    sheet.querySelectorAll('.prof-item').forEach(el=>el.onclick=async()=>{
+      await db.from('meal_plan').insert({recipe_id:r.id,plan_date:el.dataset.d,meal_slot:slot,servings:r.servings||2});
+      closeModal(); toast("Добавлено в план ✓"); await loadPlan(); });
+  };
+  draw(); openModal();
+}
+
+// ============ ЗАКУПКИ ============
+async function buildShoppingFromPlan(){
+  await Promise.all([loadPlan(),loadPantry()]);
+  const agg={};
+  forEachPlanMeal(m=>{ const rec=m.recipe; if(!rec||!Array.isArray(rec.ingredients)) return;
+    const k=(rec.servings&&m.servings)?m.servings/rec.servings:1;
+    rec.ingredients.forEach(i=>{ const key=ingKey(i); if(!key) return;
+      const a=agg[key]=agg[key]||{name:ingLabel(i),parts:{},taste:false,from:[],cat:null,pantry:true};
+      a.pantry=a.pantry&&inPantry(i); if(!a.cat&&i.cat) a.cat=i.cat;
+      const q=Number(i.qty);
+      if(i.qty==null||i.qty===''||isNaN(q)||q<=0) a.taste=true;
+      else { const [bq,bu]=toBase(q*k,normUnit(i.unit)); a.parts[bu]=(a.parts[bu]||0)+bq; }
+      if(rec.title&&!a.from.includes(rec.title)) a.from.push(rec.title);
+    });
+  });
+  state.shopItems=Object.values(agg).map(a=>{
+    const parts=Object.entries(a.parts).map(([u,q])=>fmtPart(q,u));
+    return {name:a.name, qtyText:parts.length?parts.join(' + '):'по вкусу', cat:a.pantry?HOME_CAT:(a.cat||catOf(a.name)), from:a.from, done:false, home:false};
+  }).sort((x,y)=>x.name.localeCompare(y.name,'ru'));
+  await saveShoppingList();
+  showScreen('shop');
+}
+function catOf(name){ const n=(name||'').toLowerCase().replace(/ё/g,'е');
+  if(/лосос|форел|треск|рыб|тунц|тунец|скумбри|сельд|креветк|кальмар|миди|икр|краб|судак|дорад|сибас|минта|хек|семг/.test(n)) return "Рыба и морепродукты";
+  if(/куриц|курин|индейк|говяд|телят|свин|фарш|бекон|ветчин|колбас|сосиск|баранин|мясо|грудк|бедр|окорок|печен/.test(n)) return "Мясо и птица";
+  if(/масло слив|яйц|яйко|желт(ок|ки)|сливк|молок|сыр|творог|сметан|йогурт|кефир|ряженк|моцарел|пармезан|рикот|маскарпон|брынз|фета/.test(n)) return "Молочное и яйца";
+  if(/яблок|банан|ягод|клубник|малин|черник|груш|апельсин|мандарин|лимон|лайм|ревен|вишн|смородин|персик|абрикос|изюм|финик|кураг|чернослив|киви|манго|ананас/.test(n)) return "Фрукты и ягоды";
+  if(/соль|специ|паприк|куркум|кориандр|зира|корица|ванил|мускат|приправ|орегано|тимьян|розмарин|лавров|перец (черн|бел|душист|молот|чили молот)|(черн|бел|душист)\S* перец|хмели/.test(n)) return "Специи и приправы";
+  if(/перец|лук|кабач|помидор|томат|огур|авокадо|зелен|базилик|укроп|кинз|петруш|чеснок|морков|картоф|капуст|салат|шпинат|баклажан|свекл|тыкв|гриб|шампиньон|сельдер|редис|руккол|имбир|брокколи/.test(n)) return "Овощи и зелень";
+  if(/соус|масло|уксус|майонез|кетчуп|горчиц/.test(n)) return "Соусы и масла";
+  return "Бакалея"; }
+
+function renderShopping(){
+  const c=document.getElementById('shopContent');
+  let html="";
+  if(!state.shopItems.length && !state.myItems.length){ html=`<div class="state">Список пуст. Собери его из плана недели (кнопка внизу плана).</div>`; }
+  else { html+=`<button class="share-btn" id="shareBtn"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Поделиться списком</button>`; }
+  const main=state.shopItems.filter(x=>x.cat!==HOME_CAT), home=state.shopItems.filter(x=>x.cat===HOME_CAT);
+  if(state.shopMode==="grouped"){
+    const present=[...new Set(main.map(x=>x.cat))]; const order=[...ING_CATS,"Рыба и мясо","Молочное","Бакалея и прочее"];
+    [...order.filter(x=>present.includes(x)),...present.filter(x=>!order.includes(x))].forEach(cat=>{ const items=main.filter(x=>x.cat===cat);
+      html+=`<div class="group"><div class="group-title">${esc(cat)}</div><div class="list">${items.map(it=>shopRow(it,'shop')).join('')}</div></div>`; });
+  } else if(main.length){
+    html+=`<div class="group"><div class="list">${main.map(it=>shopRow(it,'shop')).join('')}</div></div>`;
+  }
+  if(home.length) html+=`<div class="group"><div class="group-title pantry-t">🏠 ${HOME_CAT} — проверь</div><div class="list">${home.map(it=>shopRow(it,'shop')).join('')}</div></div>`;
+  html+=`<div class="group"><div class="group-title mine">＋ Моё (вручную)</div><div class="list">${state.myItems.map(it=>shopRow(it,'my')).join('')}<div class="add-row"><input class="nm" id="newName" placeholder="Добавить продукт…"><input class="qt" id="newQty" placeholder="кол-во"><button id="addMy">＋</button></div></div></div>`;
+  c.innerHTML=html;
+  c.querySelectorAll('.check').forEach(ch=>ch.onclick=()=>{ const arr=ch.dataset.list==='shop'?state.shopItems:state.myItems; arr[+ch.dataset.i].done=!arr[+ch.dataset.i].done; saveShoppingList(); renderShopping(); });
+  c.querySelectorAll('.home-toggle').forEach(h=>h.onclick=()=>{ state.shopItems[+h.dataset.i].home=!state.shopItems[+h.dataset.i].home; saveShoppingList(); renderShopping(); });
+  const add=document.getElementById('addMy'); if(add) add.onclick=()=>{ const n=document.getElementById('newName').value.trim(); const q=document.getElementById('newQty').value.trim(); if(!n)return; state.myItems.push({name:n,qty:q,unit:'',done:false,manual:true}); saveShoppingList(); renderShopping(); };
+  const sh=document.getElementById('shareBtn'); if(sh) sh.onclick=shareShopping;
+}
+function shopRow(it,list){ const idx=(list==='shop'?state.shopItems:state.myItems).indexOf(it);
+  const qty=it.manual?(it.qty||''):(it.qtyText||'');
+  const from=it.from&&it.from.length>1?`<span style="font-size:11px;color:var(--ink-soft);display:block">${esc([...new Set(it.from)].join(' + '))}</span>`:'';
+  const homeBtn=list==='shop'?`<span class="home-toggle ${it.home?'on':''}" data-i="${idx}">${it.home?'✓ есть дома':'есть дома'}</span>`:'';
+  return `<div class="item ${it.done?'done':''} ${it.home?'home':''}"><div class="check ${it.done?'on':''}" data-list="${list}" data-i="${idx}"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div><div class="item-name">${esc(it.name)}${from}</div>${homeBtn}<div class="item-qty">${esc(qty)}</div></div>`;
+}
+
+// ============ СЕМЬЯ ============
+async function renderFamily(){
+  const c=document.getElementById('familyContent'); c.classList.remove('state');
+  const wishes=await loadFamily();
+  c.innerHTML=`<div class="seclabel">Профили</div><div style="margin-bottom:24px">${state.profiles.map(p=>`<div class="prof-item ${p.id===state.profile?.id?'active':''}" data-pid="${p.id}"><span class="av" style="background:${p.color}22">${p.emoji}</span><span class="nm">${p.name}</span>${p.id===state.profile?.id?'<span style="color:var(--accent);font-size:13px;font-weight:600">сейчас готовит</span>':''}</div>`).join('')}
+    <div class="prof-item" id="addProf" style="border-style:dashed;justify-content:center;color:var(--ink-soft)">＋ Добавить профиль</div></div>
+    <div class="seclabel">Хотелки недели 💭</div>
+    <div style="margin-bottom:12px">${wishes.length?wishes.map(w=>`<div class="wish"><span class="av" style="background:${(w.profiles?.color||'#FF7A00')}22">${w.profiles?.emoji||'🙂'}</span><div class="wtext">${w.recipes?w.recipes.title:w.free_text||'—'}<div class="wwho">${w.profiles?.name||''}</div></div><button class="wish-del" data-wid="${w.id}"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`).join(''):'<div style="color:var(--ink-soft);font-size:14px;padding:8px 2px">Пока пусто. Добавь что хочется приготовить на неделе.</div>'}</div>
+    <div class="add-row" style="padding:0"><input class="nm" id="wishText" placeholder="Хочу приготовить…" style="flex:1"><button id="addWish">＋</button></div>`;
+  c.querySelectorAll('[data-pid]').forEach(el=>el.onclick=()=>{ state.profile=state.profiles.find(p=>p.id===+el.dataset.pid); document.getElementById('profAv').textContent=state.profile.emoji; document.getElementById('profName').textContent=state.profile.name; renderFamily(); renderGallery(); toast(`Готовит: ${state.profile.name}`); });
+  document.getElementById('addProf').onclick=addProfile;
+  c.querySelectorAll('.wish-del').forEach(b=>b.onclick=async()=>{ await db.from('wishes').delete().eq('id',+b.dataset.wid); renderFamily(); });
+  document.getElementById('addWish').onclick=async()=>{ const t=document.getElementById('wishText').value.trim(); if(!t) return; await db.from('wishes').insert({profile_id:state.profile?.id,free_text:t}); document.getElementById('wishText').value=''; renderFamily(); toast("Хотелка добавлена ✓"); };
+}
+async function addProfile(){
+  const name=prompt("Имя нового профиля:"); if(!name) return;
+  const emoji=prompt("Эмодзи (например 👧):","🙂")||"🙂";
+  const { data }=await db.from('profiles').insert({name,emoji,color:'#FF7A00'}).select();
+  if(data){ state.profiles.push(data[0]); renderFamily(); toast("Профиль добавлен ✓"); }
+}
+
+// ============ ГОТОВИМ СЕГОДНЯ ============
+async function renderTodayBlock(){
+  const box=document.getElementById('todayBlock');
+  const today=dateKey(new Date());
+  const { data }=await db.from('meal_plan').select('meal_slot, recipes(id,title)').eq('plan_date',today);
+  if(!data||!data.length){ box.innerHTML=''; return; }
+  const slotName={breakfast:'Завтрак',lunch:'Обед',dinner:'Ужин'};
+  box.innerHTML=`<div class="today-card" id="todayCard">
+    <div class="lbl"><svg viewBox="0 0 24 24"><path d="M3 2l1 7h16l1-7M5 9v11a2 2 0 002 2h10a2 2 0 002-2V9"/></svg>Готовим сегодня</div>
+    <div class="meals">${data.filter(d=>d.recipes).map(d=>`<div><span class="tm">${esc(prettyTitle(d.recipes.title))}</span> <span class="ts">· ${slotName[d.meal_slot]||''}</span></div>`).join('')}</div>
+  </div>`;
+  const card=document.getElementById('todayCard');
+  if(card&&data[0].recipes) card.onclick=()=>openCard(data[0].recipes.id);
+}
+
+// ============ РЕЖИМ ГОТОВКИ + ТАЙМЕРЫ ============
+let cookSteps=[], cookIdx=0, cookTitle="";
+function parseSteps(r){ return (r.recipe_text||"").split("\n").map(s=>s.replace(/^\s*\d+[\.\)]\s*/,'').trim()).filter(Boolean); }
+function stepTimerMin(text){ const m=text.match(/(\d+)(?:\s*[-–]\s*(\d+))?\s*мин/i); if(m) return m[2]?+m[2]:+m[1]; const h=text.match(/(\d+)\s*час/i); if(h) return +h[1]*60; return null; }
+
+function openCookMode(r){
+  cookSteps=parseSteps(r); cookIdx=0; cookTitle=r.title||'Готовка';
+  if(!cookSteps.length){ toast("У рецепта нет пошаговых инструкций"); return; }
+  if(navigator.wakeLock){ navigator.wakeLock.request('screen').then(l=>{window._wakeLock=l;}).catch(()=>{}); }
+  document.getElementById('cookMode').classList.add('open');
+  renderCookStep();
+}
+function renderCookStep(){
+  document.getElementById('cookTitle').textContent=cookTitle;
+  document.getElementById('cookNum').textContent=`Шаг ${cookIdx+1} из ${cookSteps.length}`;
+  document.getElementById('cookTxt').textContent=cookSteps[cookIdx];
+  const tmin=stepTimerMin(cookSteps[cookIdx]); const tw=document.getElementById('cookTimerWrap');
+  tw.innerHTML = tmin ? `<button id="cookTimerBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>Таймер ${tmin} мин</button>` : '';
+  if(tmin){ document.getElementById('cookTimerBtn').onclick=()=>startTimer(tmin); }
+  document.getElementById('cookPrev').style.visibility=cookIdx>0?'visible':'hidden';
+  document.getElementById('cookNext').textContent=cookIdx<cookSteps.length-1?'Дальше →':'Готово ✓';
+}
+function closeCookMode(){ document.getElementById('cookMode').classList.remove('open'); if(window._wakeLock){ window._wakeLock.release(); window._wakeLock=null; } }
+function startTimer(min){
+  toast(`Таймер на ${min} мин запущен`);
+  setTimeout(()=>{ try{ new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=').play(); }catch(e){}
+    alert(`⏰ Время вышло! (${min} мин)\n\n${cookTitle}`); }, min*60*1000);
+}
+
+// ============ ПОДСКАЗКИ ПЛАНА ============
+function planHintOld(){
+  const sorted=[...dishes()].sort((a,b)=> new Date(a.last_cooked_at||0)-new Date(b.last_cooked_at||0));
+  const r=sorted[0]; if(!r){ toast("Нет рецептов"); return; }
+  openPlanPicker(r); toast(`Давно не готовил: ${r.title}`);
+}
+function planHintRandom(){
+  const d=dishes(); if(!d.length){ toast("Нет рецептов"); return; }
+  const r=d[Math.floor(Math.random()*d.length)];
+  openPlanPicker(r); toast(`Случайный выбор: ${r.title}`);
+}
+
+// ============ РЕЙТИНГ И ЗАМЕТКА (в карточке) ============
+async function setRating(r,stars){
+  const pid=state.profile?.id; if(!pid) return;
+  await db.from('recipe_ratings').upsert({recipe_id:r.id,profile_id:pid,stars},{onConflict:'recipe_id,profile_id'});
+  const ex=(r.recipe_ratings||[]).find(x=>x.profile_id===pid);
+  if(ex) ex.stars=stars; else (r.recipe_ratings=r.recipe_ratings||[]).push({recipe_id:r.id,profile_id:pid,stars});
+  renderCard();
+}
+let noteTimer=null;
+async function saveNote(r,text){
+  const pid=state.profile?.id; if(!pid) return;
+  clearTimeout(noteTimer);
+  noteTimer=setTimeout(async()=>{
+    await db.from('recipe_ratings').upsert({recipe_id:r.id,profile_id:pid,note:text},{onConflict:'recipe_id,profile_id'});
+    const ex=(r.recipe_ratings||[]).find(x=>x.profile_id===pid);
+    if(ex) ex.note=text; else (r.recipe_ratings=r.recipe_ratings||[]).push({recipe_id:r.id,profile_id:pid,note:text});
+    toast("Заметка сохранена ✓");
+  },800);
+}
+function myRating(r){ return (r.recipe_ratings||[]).find(x=>x.profile_id===state.profile?.id)||{}; }
+
+// ============ ХОТЕЛКИ ============
+async function loadFamily(){
+  const { data }=await db.from('wishes').select('*, profiles(name,emoji,color), recipes(title)').order('created_at',{ascending:false});
+  return data||[];
+}
+
+// ============ СОХРАНЕНИЕ / ЗАГРУЗКА АКТИВНОГО СПИСКА ============
+async function getActiveRun(){
+  let { data }=await db.from('shopping_runs').select('*').eq('is_active',true).limit(1);
+  if(data&&data.length) return data[0];
+  const ins=await db.from('shopping_runs').insert({title:'Текущая закупка',is_active:true}).select();
+  return ins.data?ins.data[0]:null;
+}
+async function saveShoppingList(){
+  const run=await getActiveRun(); if(!run) return;
+  await db.from('shopping_list').delete().eq('list_id',run.id);
+  const rows=[
+    ...state.shopItems.map(it=>({list_id:run.id,item_name:it.name,qty:null,unit:it.qtyText||'',category:it.cat,source:'recipe',from_recipes:(it.from||[]).join(' + '),is_checked:it.done,have_at_home:it.home||false})),
+    ...state.myItems.map(it=>({list_id:run.id,item_name:it.name,qty:null,unit:it.qty||'',category:'Моё',source:'manual',is_checked:it.done,have_at_home:false}))
+  ];
+  if(rows.length) await db.from('shopping_list').insert(rows);
+}
+async function loadShoppingList(){
+  const run=await getActiveRun(); if(!run) return false;
+  const { data }=await db.from('shopping_list').select('*').eq('list_id',run.id).order('id');
+  if(!data||!data.length) return false;
+  const qt=x=>x.qty!=null?`${fmtNum(+x.qty)} ${x.unit||''}`.trim():(x.unit||'');
+  state.shopItems=data.filter(x=>x.source==='recipe').map(x=>({name:x.item_name,qtyText:qt(x),cat:x.category||catOf(x.item_name),from:x.from_recipes?x.from_recipes.split(' + '):[],done:x.is_checked,home:x.have_at_home}));
+  state.myItems=data.filter(x=>x.source==='manual').map(x=>({name:x.item_name,qty:qt(x),unit:'',done:x.is_checked,manual:true}));
+  return true;
+}
+
+// ============ ПОДЕЛИТЬСЯ СПИСКОМ ============
+function shareShopping(){
+  const lines=["🛒 Список покупок:",""];
+  const active=state.shopItems.filter(i=>!i.home&&!i.done&&i.cat!==HOME_CAT);
+  const byCat={};
+  active.forEach(i=>{ (byCat[i.cat]=byCat[i.cat]||[]).push(i); });
+  Object.keys(byCat).forEach(cat=>{
+    lines.push(cat+":");
+    byCat[cat].forEach(i=>lines.push(`• ${i.name}${i.qtyText?' — '+i.qtyText:''}`));
+    lines.push("");
+  });
+  const my=state.myItems.filter(i=>!i.done);
+  if(my.length){ lines.push("Ещё:"); my.forEach(i=>lines.push(`• ${i.name}${i.qty?' — '+i.qty:''}`)); lines.push(""); }
+  const chk=state.shopItems.filter(i=>i.cat===HOME_CAT&&!i.home&&!i.done);
+  if(chk.length) lines.push("Проверь дома: "+chk.map(i=>i.name.toLowerCase()).join(', '));
+  const text=lines.join("\n").trim();
+  if(navigator.share){ navigator.share({title:'Список покупок',text}).catch(()=>{}); }
+  else { navigator.clipboard.writeText(text).then(()=>toast("Список скопирован ✓")); }
+}
+
+// ============ НАВИГАЦИЯ ============
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.screen===name));
+  window.scrollTo(0,0);
+  if(name==='plan'){ loadPlan().then(renderPlan); }
+  if(name==='family'){ renderFamily(); }
+  if(name==='gallery'){ renderGallery(); }
+  if(name==='shop'){ loadShoppingList().then(loaded=>{ renderShopping(); }); }
+  if(name==='have'){ renderHave(); }
+}
+function openModal(){ document.getElementById('modal').classList.add('open'); }
+function closeModal(){ document.getElementById('modal').classList.remove('open'); document.getElementById('sheet').classList.remove('tall'); }
+document.getElementById('modal').onclick=(e)=>{ if(e.target.id==='modal') closeModal(); };
+
+document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>showScreen(a.dataset.screen));
+document.getElementById('search').oninput=(e)=>{ state.query=e.target.value; renderGallery(); };
+document.getElementById('haveBack').onclick=()=>showScreen('gallery');
+document.getElementById('haveInput').oninput=renderHaveSugg;
+document.getElementById('haveInput').onkeydown=(e)=>{ if(e.key==='Enter'){ addHave(e.target.value); e.target.value=''; renderHaveSugg(); } };
+document.getElementById('profileBtn').onclick=()=>{ showScreen('family'); };
+document.getElementById('weekPrev').onclick=()=>{ state.weekOffset--; loadPlan().then(renderPlan); };
+document.getElementById('weekNext').onclick=()=>{ state.weekOffset++; loadPlan().then(renderPlan); };
+document.getElementById('tripDay').onchange=(e)=>{ state.tripDay=+e.target.value; renderPlan(); };
+document.getElementById('buildShopping').onclick=buildShoppingFromPlan;
+// режим готовки
+document.getElementById('cookClose').onclick=closeCookMode;
+document.getElementById('cookPrev').onclick=()=>{ if(cookIdx>0){cookIdx--; renderCookStep();} };
+document.getElementById('cookNext').onclick=()=>{ if(cookIdx<cookSteps.length-1){cookIdx++; renderCookStep();} else closeCookMode(); };
+// подсказки плана
+document.getElementById('hintOld').onclick=planHintOld;
+document.getElementById('hintRandom').onclick=planHintRandom;
+document.querySelectorAll('#screen-shop .toggle button').forEach(b=>b.onclick=()=>{ state.shopMode=b.dataset.mode; document.querySelectorAll('#screen-shop .toggle button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderShopping(); });
+
+// ============ СТАРТ ============
+(async function init(){
+  try {
+    try{ state.have=JSON.parse(localStorage.getItem('have')||'[]'); }catch(e){ state.have=[]; }
+    loadPantry();
+    await Promise.all([loadProfiles(),loadTags()]);
+    await loadRecipes();
+    renderGallery();
+  } catch(e){ console.error(e); document.getElementById('galleryState').innerHTML="Ошибка подключения к базе. Проверь интернет."; }
+})();
+</script>
+</body>
+</html>
